@@ -1,0 +1,64 @@
+name: build docker image
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+env:
+  DOCKER_REPO: jonoh/yt-cast
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Read version
+        id: read_version
+        run: |
+          echo "::set-output name=VERSION::$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+      
+      - name: (Try to) tag
+        id: create_tag
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          git tag "${{ steps.read_version.outputs.VERSION }}"
+          git push --tags
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm/v7,linux/arm64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: "${{ env.DOCKER_REPO }}:${{ steps.read_version.outputs.VERSION }}"
+
+      - name: Update repo description
+        uses: peter-evans/dockerhub-description@v2
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          repository: ${{ env.DOCKER_REPO }}

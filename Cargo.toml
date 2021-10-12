@@ -1,0 +1,24 @@
+[package]
+name = "yt-cast"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.44"
+async-process = "1.2.0"
+async-std = "1.10.0"
+chrono = "0.4.19"
+dotenv = "0.15.0"
+itertools = "0.10.1"
+log = "0.4.14"
+rocket = "0.5.0-rc.1"
+rss = "1.10.0"
+serde = { version = "1.0.130", features = ["derive"] }
+serde-aux = "2.3.0"
+serde_json = "1.0.68"
+tempfile = "3.2.0"
+thiserror = "1.0.29"
+tokio = "1.12.0"
+urlencoding = "2.1.0"
