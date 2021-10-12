@@ -4,8 +4,8 @@ Converts YouTube channels to podcasts. Removes ads with SponsorBlock.
 
 ## Environment Variables
 
-ROCKET_base_url - base url to include in feeds
-ROCKET_channel_whitelist - array of whitelisted channel names. TOML syntax.
+- ROCKET_base_url - base url to include in feeds.
+- ROCKET_channel_whitelist - array of whitelisted channel names. TOML syntax.
 
 ## Caveats
 

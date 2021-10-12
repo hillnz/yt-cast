@@ -51,7 +51,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm/v7,linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.ref == 'refs/heads/main' }}
           tags: "${{ env.DOCKER_REPO }}:${{ steps.read_version.outputs.VERSION }}"
 
