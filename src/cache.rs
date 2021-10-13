@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use async_std::fs;
-use async_std::fs::{create_dir_all, File, OpenOptions, remove_dir};
+use async_std::fs::{create_dir_all, remove_dir, File, OpenOptions};
 use async_std::io::ErrorKind;
 use async_std::path::PathBuf;
 use async_std::prelude::*;
@@ -9,15 +9,14 @@ use urlencoding::encode;
 
 pub struct Cache {
     dir: TempDir,
-    cache_time: u64
+    cache_time: u64,
 }
 
 impl Cache {
-
     pub fn new() -> Result<Cache> {
         let c = Cache {
             dir: TempDir::new()?,
-            cache_time: 86400
+            cache_time: 86400,
         };
         Ok(c)
     }
@@ -37,17 +36,18 @@ impl Cache {
         }
 
         // Update file's modification time, or create
-        match OpenOptions::new()
-                .append(true)
-                .open(&p)
-                .await {
+        match OpenOptions::new().append(true).open(&p).await {
             Ok(f) => Ok(f),
             Err(e) => match e.kind() {
                 ErrorKind::NotFound => File::create(&p).await,
-                _ => Err(e)
-            }
-        }.map_err(|e| { log::error!("failed to touch/create file: {}", e); e })?;
-            
+                _ => Err(e),
+            },
+        }
+        .map_err(|e| {
+            log::error!("failed to touch/create file: {}", e);
+            e
+        })?;
+
         self.clean().await?;
 
         Ok(p)
@@ -60,7 +60,6 @@ impl Cache {
         let mut dirs = vec![root];
 
         while let Some(dir) = dirs.pop() {
-
             let mut empty = true;
 
             let mut entries = fs::read_dir(&dir).await?;
@@ -71,12 +70,9 @@ impl Cache {
 
                 let f_type = entry.file_type().await?;
                 if f_type.is_dir() {
-
                     dirs.push(entry.path());
                     continue;
-
                 } else if f_type.is_file() {
-                    
                     let modified = entry.metadata().await?.modified()?;
                     if let Ok(time_diff) = modified.elapsed() {
                         if time_diff.as_secs() > self.cache_time {
@@ -91,10 +87,8 @@ impl Cache {
             if empty {
                 remove_dir(dir).await?
             }
-
-        };
+        }
 
         Ok(())
     }
-
 }
