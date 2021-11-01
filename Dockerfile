@@ -1,4 +1,4 @@
-FROM rust:1.55.0 AS build
+FROM rust:1.56.1 AS build
 
 COPY . .
 
