@@ -1,4 +1,6 @@
-FROM rust:1.55.0 AS build
+FROM --platform=$BUILDPLATFORM jonoh/rust-crossbuild:1.56.1 AS build
+
+WORKDIR /usr/src/app
 
 COPY . .
 
