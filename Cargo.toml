@@ -15,7 +15,7 @@ itertools = "0.10.1"
 log = "0.4.14"
 rocket = "0.5.0-rc.1"
 rss = "1.10.0"
-serde = { version = "1.0.130", features = ["derive"] }
+serde = { version = "1.0.133", features = ["derive"] }
 serde-aux = "2.3.0"
 serde_json = "1.0.68"
 tempfile = "3.2.0"
