@@ -53,6 +53,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.ref == 'refs/heads/main' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max          
           tags: "${{ env.DOCKER_REPO }}:${{ steps.read_version.outputs.VERSION }}"
 
       - name: Update repo description
