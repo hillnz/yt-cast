@@ -136,8 +136,8 @@ impl PodcastProxy {
                     .title(channel.channel.clone())
                     .url(thumbnail.url.clone())
                     .link(thumbnail.url.clone())
-                    .width(thumbnail.width.to_string())
-                    .height(thumbnail.height.to_string())
+                    .width(thumbnail.width.unwrap_or(0).to_string())
+                    .height(thumbnail.height.unwrap_or(0).to_string())
                     .build()
                     .map_err(|e| anyhow!(e))?,
             );
