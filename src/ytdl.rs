@@ -219,7 +219,7 @@ impl<'a> YtDl<'a> {
             "--sponsorblock-remove",
             "all",
             "-S",
-            "ext",
+            "ext,height:720",
             "-o",
             output.to_str().ok_or_else(|| anyhow!("bad output path"))?,
             &vid_url,
