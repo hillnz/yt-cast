@@ -76,6 +76,14 @@ impl<'a> YtDl<'a> {
         )
     }
 
+    fn get_channel_id_url(channel_id: &str, page: &str) -> String {
+        format!(
+            "https://www.youtube.com/channel/{}/{}",
+            encode(channel_id),
+            encode(page)
+        )
+    }
+
     fn get_user_url(channel_name: &str, page: &str) -> String {
         format!(
             "https://www.youtube.com/user/{}/{}",
@@ -128,32 +136,28 @@ impl<'a> YtDl<'a> {
     pub async fn get_channel_info(&self, channel_name: &str) -> Result<Channel, YtDlError> {
         log::debug!("get_channel_info");
 
-        let channel_about_url = YtDl::get_channel_url(channel_name, "about");
-        let user_about_url = YtDl::get_user_url(channel_name, "about");
+        let candidate_urls = [
+            (YtDl::get_channel_url(channel_name, "about"), YtDl::get_channel_url(channel_name, "videos")),
+            (YtDl::get_user_url(channel_name, "about"), YtDl::get_user_url(channel_name, "videos")),
+            (YtDl::get_channel_id_url(channel_name, "about"), YtDl::get_channel_id_url(channel_name, "videos")),
+        ];
 
-        let mut vids_url = YtDl::get_channel_url(channel_name, "videos");
-        let output_result = self.run_get_channel_info(&channel_about_url).await;
-        let output = match output_result {
-            Ok(o) => Ok(o),
-            Err(e) => match e {
-                // Try user url if channel url didn't work
-                YtDlError::ItemNotFound => {
-                    vids_url = YtDl::get_user_url(channel_name, "videos");
-                    self.run_get_channel_info(&user_about_url).await
-                }
-                _ => {
-                    log::error!("Bad output_result: {}", e);
-                    Err(e)
-                }
-            },
-        }?;
+        for (about_url, videos_url) in candidate_urls.iter() {
+            let output_result = self.run_get_channel_info(about_url).await;
+            if let Err(YtDlError::ItemNotFound) = output_result {
+                continue;
+            }
+            let output = output_result?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut channel: Channel =
-            serde_json::from_str(&stdout).context("failed to parse ytdl output")?;
-        channel.videos_url = vids_url;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut channel: Channel =
+                serde_json::from_str(&stdout).context("failed to parse ytdl output")?;
+            channel.videos_url = videos_url.into();
 
-        Ok(channel)
+            return Ok(channel);
+        }
+
+        Err(YtDlError::ItemNotFound)
     }
 
     pub async fn get_channel_videos(
