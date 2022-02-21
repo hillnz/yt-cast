@@ -129,14 +129,19 @@ impl PodcastProxy {
             .items(rss_items)
             .pub_date(oldest_date.to_rfc2822());
 
-        if let Some(thumbnail) = channel.thumbnails.first() {
+        let squarest_thumbnail = channel.thumbnails.iter()
+            .filter(|t| t.width.and(t.height).is_some())
+            .map(|t| (100 - (t.width.unwrap() as f32 / t.height.unwrap() as f32 * 100.0).abs() as u32, t))
+            .min_by_key(|t| t.0);
+
+        if let Some(thumbnail) = squarest_thumbnail {
             rss_channel_builder.image(
                 ImageBuilder::default()
                     .title(channel.channel.clone())
-                    .url(thumbnail.url.clone())
-                    .link(thumbnail.url.clone())
-                    .width(thumbnail.width.unwrap_or(0).to_string())
-                    .height(thumbnail.height.unwrap_or(0).to_string())
+                    .url(thumbnail.1.url.clone())
+                    .link(thumbnail.1.url.clone())
+                    .width(thumbnail.1.width.unwrap_or(0).to_string())
+                    .height(thumbnail.1.height.unwrap_or(0).to_string())
                     .build()
                     .map_err(|e| anyhow!(e))?,
             );
