@@ -24,8 +24,6 @@ pub enum PodcastError {
     Other(#[from] anyhow::Error),
 }
 
-const ITEM_DELAY: i64 = 3;
-
 pub struct PodcastProxy {
     pub cache: Cache,
 }
@@ -35,6 +33,7 @@ impl PodcastProxy {
         &self,
         media_base_url: &str,
         channel_name: &str,
+        delay_days: u32,
     ) -> Result<String, PodcastError> {
         let yt = ytdl::YtDl::new(&self.cache);
 
@@ -83,11 +82,11 @@ impl PodcastProxy {
                 oldest_date = date;
             }
 
-            if (Utc::now() - date) < Duration::days(ITEM_DELAY) {
+            if (Utc::now() - date) < Duration::days(delay_days.into()) {
                 log::info!(
                     "Ignoring video {} which hasn't been out for {} days yet",
                     vid.id,
-                    ITEM_DELAY
+                    delay_days
                 );
                 continue;
             }

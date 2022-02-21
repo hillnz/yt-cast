@@ -26,19 +26,22 @@ struct AppState {
     proxy: PodcastProxy,
 }
 
-#[get("/feed/<channel_name>")]
+#[get("/feed/<channel_name>?<delay>")]
 async fn get_feed(
     config: &State<AppConfig>,
     state: &State<AppState>,
     channel_name: &str,
+    delay: Option<&str>
 ) -> Result<Xml<String>, Status> {
     if !config.channel_whitelist.contains(&channel_name.to_string()) {
         return Err(Status::NotFound);
     }
 
+    let delay_days = delay.unwrap_or("0").parse::<u32>().unwrap_or(0);
+
     match state
         .proxy
-        .get_feed(&format!("{}/media/", config.base_url), channel_name)
+        .get_feed(&format!("{}/media/", config.base_url), channel_name, delay_days)
         .await
     {
         Ok(s) => Ok(Xml(s)),
