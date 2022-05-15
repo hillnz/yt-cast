@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.44"
-async-process = "1.2.0"
+async-process = "1.4.0"
 async-std = "1.10.0"
 chrono = "0.4.19"
 dotenv = "0.15.0"
