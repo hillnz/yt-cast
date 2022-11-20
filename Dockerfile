@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM jonoh/rust-crossbuild:1.58.1 AS build
+FROM --platform=$BUILDPLATFORM jonoh/rust-crossbuild:1.65.0 AS build
 
 WORKDIR /usr/src/app
 
