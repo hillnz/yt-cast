@@ -1,10 +1,10 @@
-FROM --platform=$BUILDPLATFORM jonoh/rust-crossbuild:1.65.0 AS build
+FROM --platform=$BUILDPLATFORM jonoh/rust-crossbuild:1.67.1 AS build
 
 WORKDIR /usr/src/app
 
 COPY . .
 
-RUN cargo install --path .
+RUN cargo install --locked --path .
 
 FROM debian:11.2-slim
 

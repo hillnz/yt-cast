@@ -57,7 +57,7 @@ impl PodcastProxy {
             let enclosure = EnclosureBuilder::default()
                 .url(base_url.clone() + &vid.id)
                 .length(ARBITRARY_SIZE.to_string())
-                .mime_type("video/mp4")
+                .mime_type("video/mp4".to_owned())
                 .build()
                 .map_err(|e| anyhow!(e))?;
 
@@ -67,10 +67,10 @@ impl PodcastProxy {
                 .map_err(|e| anyhow!(e))?;
 
             let it_item = ITunesItemExtensionBuilder::default()
-                .author(vid.uploader)
-                .duration(vid.duration)
-                .subtitle(vid.description.clone())
-                .summary(vid.description.clone())
+                .author(Some(vid.uploader))
+                .duration(Some(vid.duration))
+                .subtitle(Some(vid.description.clone()))
+                .summary(Some(vid.description.clone()))
                 .build()
                 .map_err(|e| anyhow!(e))?;
 
@@ -92,12 +92,12 @@ impl PodcastProxy {
             }
 
             let item = ItemBuilder::default()
-                .title(vid.title)
-                .description(vid.description)
-                .enclosure(enclosure)
-                .guid(guid)
-                .pub_date(date.to_rfc2822())
-                .itunes_ext(it_item)
+                .title(Some(vid.title))
+                .description(Some(vid.description))
+                .enclosure(Some(enclosure))
+                .guid(Some(guid))
+                .pub_date(Some(date.to_rfc2822()))
+                .itunes_ext(Some(it_item))
                 .build()
                 .map_err(|e| anyhow!(e))?;
 
@@ -105,10 +105,10 @@ impl PodcastProxy {
         }
 
         let rss_itunes = ITunesChannelExtensionBuilder::default()
-            .author(channel.channel.clone())
-            .block("Yes".to_string())
+            .author(Some(channel.channel.clone()))
+            .block(Some("Yes".to_string()))
             // .image(image.clone())
-            .subtitle(channel.description.clone())
+            .subtitle(Some(channel.description.clone()))
             .build()
             .map_err(|e| anyhow!(e))?;
 
@@ -124,10 +124,10 @@ impl PodcastProxy {
             .title(channel.channel.clone())
             .link(channel.webpage_url)
             .description(channel.description.clone())
-            .itunes_ext(rss_itunes)
+            .itunes_ext(Some(rss_itunes))
             .namespaces(namespaces)
             .items(rss_items)
-            .pub_date(oldest_date.to_rfc2822());
+            .pub_date(Some(oldest_date.to_rfc2822()));
 
         let squarest_thumbnail = channel.thumbnails.iter()
             .filter(|t| t.width.and(t.height).is_some())
@@ -136,14 +136,14 @@ impl PodcastProxy {
 
         if let Some(thumbnail) = squarest_thumbnail {
             rss_channel_builder.image(
-                ImageBuilder::default()
+                Some(ImageBuilder::default()
                     .title(channel.channel.clone())
                     .url(thumbnail.1.url.clone())
                     .link(thumbnail.1.url.clone())
-                    .width(thumbnail.1.width.unwrap_or(0).to_string())
-                    .height(thumbnail.1.height.unwrap_or(0).to_string())
+                    .width(Some(thumbnail.1.width.unwrap_or(0).to_string()))
+                    .height(Some(thumbnail.1.height.unwrap_or(0).to_string()))
                     .build()
-                    .map_err(|e| anyhow!(e))?,
+                    .map_err(|e| anyhow!(e))?),
             );
         }
 

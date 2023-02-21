@@ -27,10 +27,10 @@ impl Cache {
         let (last, elements) = key.split_last().ok_or_else(|| anyhow!("empty key"))?;
 
         for k in elements {
-            p.push(encode(k).replace("%", "+"));
+            p.push(encode(k).replace('%', "+"));
             create_dir_all(&p).await?;
         }
-        p.push(encode(last).replace("%", "+"));
+        p.push(encode(last).replace('%', "+"));
         if let Some(ext_val) = ext {
             p.set_extension(ext_val);
         }
