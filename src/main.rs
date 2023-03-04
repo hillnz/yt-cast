@@ -76,6 +76,8 @@ async fn not_found() -> String {
 
 #[rocket::main]
 async fn main() -> Result<()> {
+    env_logger::init();
+
     dotenv().ok();
 
     let cache = Cache::new()?;
