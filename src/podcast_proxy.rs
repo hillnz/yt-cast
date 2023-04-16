@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use async_std::fs;
 use async_std::path::PathBuf;
 use chrono::{Duration, NaiveDate, TimeZone, Utc};
@@ -58,21 +58,18 @@ impl PodcastProxy {
                 .url(base_url.clone() + &vid.id)
                 .length(ARBITRARY_SIZE.to_string())
                 .mime_type("video/mp4".to_owned())
-                .build()
-                .map_err(|e| anyhow!(e))?;
+                .build();
 
             let guid = GuidBuilder::default()
                 .value(vid.id.clone())
-                .build()
-                .map_err(|e| anyhow!(e))?;
+                .build();
 
             let it_item = ITunesItemExtensionBuilder::default()
                 .author(Some(vid.uploader))
                 .duration(Some(vid.duration))
                 .subtitle(Some(vid.description.clone()))
                 .summary(Some(vid.description.clone()))
-                .build()
-                .map_err(|e| anyhow!(e))?;
+                .build();
 
             // Reformat date
             let raw_date =
@@ -98,8 +95,7 @@ impl PodcastProxy {
                 .guid(Some(guid))
                 .pub_date(Some(date.to_rfc2822()))
                 .itunes_ext(Some(it_item))
-                .build()
-                .map_err(|e| anyhow!(e))?;
+                .build();
 
             rss_items.push(item);
         }
@@ -109,10 +105,9 @@ impl PodcastProxy {
             .block(Some("Yes".to_string()))
             // .image(image.clone())
             .subtitle(Some(channel.description.clone()))
-            .build()
-            .map_err(|e| anyhow!(e))?;
+            .build();
 
-        let mut namespaces = HashMap::new();
+        let mut namespaces = BTreeMap::new();
         namespaces.insert(
             "itunes".into(),
             "http://www.itunes.com/dtds/podcast-1.0.dtd".into(),
@@ -142,12 +137,11 @@ impl PodcastProxy {
                     .link(thumbnail.1.url.clone())
                     .width(Some(thumbnail.1.width.unwrap_or(0).to_string()))
                     .height(Some(thumbnail.1.height.unwrap_or(0).to_string()))
-                    .build()
-                    .map_err(|e| anyhow!(e))?),
+                    .build()),
             );
         }
 
-        let rss_channel = rss_channel_builder.build().map_err(|e| anyhow!(e))?;
+        let rss_channel = rss_channel_builder.build();
 
         Ok(rss_channel.to_string())
     }
