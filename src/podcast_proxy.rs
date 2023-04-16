@@ -34,6 +34,7 @@ impl PodcastProxy {
         media_base_url: &str,
         channel_name: &str,
         delay_days: u32,
+        filter: Option<&str>,
     ) -> Result<String, PodcastError> {
         let yt = ytdl::YtDl::new(&self.cache);
 
@@ -54,6 +55,12 @@ impl PodcastProxy {
 
         let mut rss_items = vec![];
         for vid in vids {
+            if let Some(filter) = filter {
+                if !vid.title.contains(filter) {
+                    continue;
+                }
+            }
+
             let enclosure = EnclosureBuilder::default()
                 .url(base_url.clone() + &vid.id)
                 .length(ARBITRARY_SIZE.to_string())
