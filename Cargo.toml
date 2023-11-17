@@ -14,7 +14,7 @@ dotenv = "0.15.0"
 env_logger = "0.10.0"
 itertools = "0.11.0"
 log = "0.4.14"
-rocket = "0.5.0-rc.1"
+rocket = "0.5.0"
 rss = "2.0.3"
 serde = { version = "1.0.133", features = ["derive"] }
 serde-aux = "2.3.0"
