@@ -1,0 +1,12 @@
+{
+  "pythonVersion": "3.12",
+  "venvPath": ".",
+  "venv": ".venv",
+  "stubPath": "typestubs",
+  "executionEnvironments": [
+    {
+      "root": "src",
+    },
+  ],
+  "reportMissingModuleSource": false,
+}
