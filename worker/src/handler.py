@@ -1,4 +1,4 @@
-"""Request handling logic for the Drive proxy worker.
+"""FastAPI application for the Drive proxy worker.
 
 Orchestrates auth checking, R2 cache lookups, Google Drive path
 resolution, Durable Object coordination (downloader / waiter roles),
@@ -10,57 +10,67 @@ wiring so that ``entry.py`` stays a thin shell.
 
 from __future__ import annotations
 
-from urllib.parse import unquote, urlparse
+from typing import AsyncIterator
 
-from js import Headers, Request, console
-from js import Response as JsResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from js import Headers, console
+from js import Request as JsRequest
 from pyodide.ffi import JsProxy
-from workers import Response
 
 from drive import download_drive_file, resolve_drive_path
 from google_auth import get_access_token
 from helpers import WSClient, to_js
 
-# ---------------------------------------------------------------------------
-# Public entry point — called by the Worker's fetch handler
-# ---------------------------------------------------------------------------
+app = FastAPI()
 
-
-async def handle_request(request: JsProxy, env: JsProxy) -> Response | JsResponse:
-    """Top-level request handler.
-
-    *env* is the Cloudflare Worker environment object (bindings, vars,
-    secrets).  Returns a ``Response``.
-    """
-    try:
-        return await _handle(request, env)
-    except Exception as exc:
-        console.error(f"Unhandled error: {exc}")
-        return Response(f"Internal server error: {exc}", status=500)
+_security = HTTPBearer(auto_error=False)
 
 
 # ---------------------------------------------------------------------------
-# Core flow
+# Exception handling
 # ---------------------------------------------------------------------------
 
 
-async def _handle(request: JsProxy, env: JsProxy) -> Response | JsResponse:
-    # ── Auth ─────────────────────────────────────────────────────────
-    auth_header = request.headers.get("Authorization")
-    expected_token: str = str(env.AUTH_TOKEN)
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    console.error(f"Unhandled error: {exc}")
+    return PlainTextResponse(f"Internal server error: {exc}", status_code=500)
 
-    if not auth_header or str(auth_header) != f"Bearer {expected_token}":
-        return Response("Unauthorised", status=401)
 
-    # ── Parse path ───────────────────────────────────────────────────
-    url = urlparse(str(request.url))
-    raw_path = unquote(url.path).strip("/")
-    if not raw_path:
-        return Response("Path required", status=400)
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+
+
+async def _verify_auth(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
+) -> None:
+    """Validate the Bearer token against the ``AUTH_TOKEN`` env var."""
+    env = request.scope["env"]
+    expected_token = str(env.AUTH_TOKEN)
+    if not credentials or credentials.credentials != expected_token:
+        raise HTTPException(status_code=401, detail="Unauthorised")
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+
+@app.get("/{path:path}", dependencies=[Depends(_verify_auth)])
+async def handle(request: Request, path: str):
+    """Main request handler — resolve a Drive path, cache in R2, and serve."""
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
+
+    env = request.scope["env"]
 
     # Normalise to an R2 key (lowercase, no leading slash)
-    r2_key = raw_path.lower()
-    path_segments = [seg for seg in raw_path.split("/") if seg]
+    r2_key = path.lower()
+    path_segments = [seg for seg in path.split("/") if seg]
     filename = path_segments[-1] if path_segments else "download"
 
     # ── R2 cache check ───────────────────────────────────────────────
@@ -80,7 +90,7 @@ async def _handle(request: JsProxy, env: JsProxy) -> Response | JsResponse:
         path_segments, drive_root, token
     )
     if file_info is None:
-        return Response("File not found in Google Drive", status=404)
+        raise HTTPException(status_code=404, detail="File not found in Google Drive")
 
     file_id: str = _safe_js_str(file_info.id)
     mime_type: str = _safe_js_str(file_info.mimeType, "application/octet-stream")
@@ -89,7 +99,7 @@ async def _handle(request: JsProxy, env: JsProxy) -> Response | JsResponse:
     do_id: JsProxy = env.COORDINATOR.idFromName(r2_key)
     stub: JsProxy = env.COORDINATOR.get(do_id)
 
-    ws_req: Request = Request.new(
+    ws_req = JsRequest.new(
         "http://coordinator/ws",
         to_js({"headers": to_js({"Upgrade": "websocket"})}),
     )
@@ -109,7 +119,10 @@ async def _handle(request: JsProxy, env: JsProxy) -> Response | JsResponse:
         return await _do_wait(env, ws_client, r2_key)
     else:
         ws_client.close()
-        return Response(f"Unexpected role from coordinator: {role}", status=500)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected role from coordinator: {role}",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -125,11 +138,11 @@ async def _do_download(
     mime_type: str,
     filename: str,
     token: str,
-) -> Response | JsResponse:
+) -> StreamingResponse | PlainTextResponse:
     """Downloader: fetch from Drive → stream to R2 → notify DO → serve."""
     try:
         console.log(f"Downloading Drive file {file_id} -> R2 key {r2_key}")
-        drive_resp: JsResponse = await download_drive_file(file_id, token)
+        drive_resp = await download_drive_file(file_id, token)
 
         # Stream the response body directly into R2 (no buffering).
         _ = await env.CACHE.put(
@@ -161,12 +174,12 @@ async def _do_download(
             ws_client.close()
         except Exception:
             pass
-        return Response(f"Download failed: {exc}", status=502)
+        return PlainTextResponse(f"Download failed: {exc}", status_code=502)
 
 
 async def _do_wait(
     env: JsProxy, ws_client: WSClient, r2_key: str
-) -> Response | JsResponse:
+) -> StreamingResponse | PlainTextResponse:
     """Waiter: hold until the downloader finishes, then serve from R2."""
     console.log(f"Waiting for download: {r2_key}")
     status_msg: dict[str, str] = await ws_client.recv()
@@ -178,7 +191,7 @@ async def _do_wait(
 
     error: str | None = status_msg.get("message", "Download failed")
     console.error(f"Download error (waiter) for {r2_key}: {error}")
-    return Response(f"Download error: {error}", status=502)
+    return PlainTextResponse(f"Download error: {error}", status_code=502)
 
 
 # ---------------------------------------------------------------------------
@@ -186,15 +199,33 @@ async def _do_wait(
 # ---------------------------------------------------------------------------
 
 
-async def _serve_from_r2(env: JsProxy, r2_key: str) -> Response | JsResponse:
+async def _stream_readable(body: JsProxy) -> AsyncIterator[bytes]:
+    """Yield chunks from a JS ``ReadableStream`` as Python bytes."""
+    reader = body.getReader()
+    try:
+        while True:
+            result = await reader.read()
+            if result.done:
+                break
+            yield bytes(result.value)
+    finally:
+        reader.releaseLock()
+
+
+async def _serve_from_r2(env: JsProxy, r2_key: str) -> StreamingResponse:
     """Stream a cached file from R2 back to the client."""
     obj: JsProxy = await env.CACHE.get(r2_key)
     if not obj:
-        return Response("File not found in cache", status=404)
+        raise HTTPException(status_code=404, detail="File not found in cache")
 
-    headers = Headers.new()
-    _ = obj.writeHttpMetadata(headers)
-    headers.set("Content-Length", str(obj.size))
+    # Use writeHttpMetadata to extract content-type and friends.
+    js_headers = Headers.new()
+    _ = obj.writeHttpMetadata(js_headers)
+    content_type = _safe_js_str(
+        js_headers.get("content-type"), "application/octet-stream"
+    )
+
+    headers: dict[str, str] = {"Content-Length": str(obj.size)}
 
     # Attach a Content-Disposition derived from custom metadata.
     fname: str | None = None
@@ -205,12 +236,13 @@ async def _serve_from_r2(env: JsProxy, r2_key: str) -> Response | JsResponse:
         pass
     if fname:
         safe_fname = fname.replace('"', '\\"')
-        headers.set(
-            "Content-Disposition",
-            f'inline; filename="{safe_fname}"',
-        )
+        headers["Content-Disposition"] = f'inline; filename="{safe_fname}"'
 
-    return JsResponse.new(obj.body, to_js({"status": 200, "headers": headers}))
+    return StreamingResponse(
+        _stream_readable(obj.body),
+        media_type=content_type,
+        headers=headers,
+    )
 
 
 def _safe_js_str(js_val: object, default: str = "") -> str:
