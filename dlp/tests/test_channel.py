@@ -50,8 +50,8 @@ def override_deps(mock_ytdl: AsyncMock, mock_gdrive: AsyncMock):
     app.dependency_overrides.clear()
 
 
-async def get_channel(channel_id: str) -> tuple[int, list]:
-    """Fetch the channel videos endpoint and return status + parsed JSON."""
+async def get_channel(channel_id: str) -> tuple[int, dict | list]:
+    """Fetch the channel endpoint and return status + parsed JSON."""
     async with AsyncClient(
         transport=ASGITransport(app=app, raise_app_exceptions=False),
         base_url="http://test",
@@ -66,31 +66,39 @@ async def get_channel(channel_id: str) -> tuple[int, list]:
 
 
 @pytest.mark.asyncio
-async def test_returns_video_ids(
+async def test_returns_channel_info_with_video_ids(
     override_deps, mock_ytdl: AsyncMock, sample_channel: Channel
 ) -> None:
-    """Should return a list of video IDs for a valid channel."""
+    """Should return channel info with a videos field of video IDs."""
     mock_ytdl.get_channel_info.return_value = sample_channel
     mock_ytdl.get_channel_videos.return_value = ["abc123", "def456"]
 
     status, body = await get_channel("TestChannel")
 
     assert status == 200
-    assert body == ["abc123", "def456"]
+    assert body["channel"] == sample_channel.channel
+    assert body["description"] == sample_channel.description
+    assert body["webpage_url"] == sample_channel.webpage_url
+    assert body["epoch"] == sample_channel.epoch
+    assert body["thumbnails"] == [
+        {"url": "https://example.com/thumb.jpg", "width": 100, "height": 100},
+    ]
+    assert body["videos"] == ["abc123", "def456"]
+    assert "videos_url" not in body
 
 
 @pytest.mark.asyncio
 async def test_empty_video_list(
     override_deps, mock_ytdl: AsyncMock, sample_channel: Channel
 ) -> None:
-    """Should return an empty list when the channel has no recent videos."""
+    """Should return an empty videos list when the channel has no recent videos."""
     mock_ytdl.get_channel_info.return_value = sample_channel
     mock_ytdl.get_channel_videos.return_value = []
 
     status, body = await get_channel("TestChannel")
 
     assert status == 200
-    assert body == []
+    assert body["videos"] == []
 
 
 @pytest.mark.asyncio
