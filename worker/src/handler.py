@@ -12,9 +12,8 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from js import Headers, console
 from js import Request as JsRequest
 from pyodide.ffi import JsProxy
@@ -24,9 +23,6 @@ from google_auth import get_access_token
 from helpers import WSClient, to_js
 
 app = FastAPI()
-
-_security = HTTPBearer(auto_error=False)
-
 
 # ---------------------------------------------------------------------------
 # Exception handling
@@ -44,23 +40,12 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 # ---------------------------------------------------------------------------
 
 
-async def _verify_auth(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
-) -> None:
-    """Validate the Bearer token against the ``AUTH_TOKEN`` env var."""
-    env = request.scope["env"]
-    expected_token = str(env.AUTH_TOKEN)
-    if not credentials or credentials.credentials != expected_token:
-        raise HTTPException(status_code=401, detail="Unauthorised")
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 
-@app.get("/{path:path}", dependencies=[Depends(_verify_auth)])
+@app.get("/{path:path}")
 async def handle(request: Request, path: str):
     """Main request handler — resolve a Drive path, cache in R2, and serve."""
     if not path:

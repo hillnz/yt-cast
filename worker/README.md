@@ -61,9 +61,6 @@ https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsTuVwXyZ
 ### 4. Set secrets
 
 ```sh
-# Pre-shared token that clients must supply in the Authorization header
-uv run pywrangler secret put AUTH_TOKEN
-
 # Google Cloud service account JSON key
 # (paste the entire JSON contents when prompted)
 uv run pywrangler secret put GOOGLE_SERVICE_ACCOUNT
@@ -108,8 +105,7 @@ uv run pywrangler deploy
 ## Usage
 
 ```sh
-curl -H "Authorization: Bearer <AUTH_TOKEN>" \
-  https://drive-proxy.<your-subdomain>.workers.dev/path/to/file.pdf
+curl https://drive-proxy.<your-subdomain>.workers.dev/path/to/file.pdf
 ```
 
 The request path maps directly to the folder structure inside the configured
@@ -131,7 +127,6 @@ Then the request path would be `/reports/2025/summary.pdf`.
 | File cached in R2 | Streams from R2 (fast) |
 | Cache miss, file exists in Drive | Downloads → caches → streams from R2 |
 | Cache miss, file not found in Drive | `404 Not Found` |
-| Invalid or missing auth token | `401 Unauthorised` |
 | Download in progress by another request | Waits for download to finish, then streams from R2 |
 | Download fails | `502 Bad Gateway` with error detail |
 
@@ -155,7 +150,7 @@ drive-proxy/
 
 ## How it works
 
-### Authentication
+### Google authentication
 
 The worker mints short-lived Google access tokens using the service account's
 RSA private key. JWT signing is done via the Web Crypto API (`crypto.subtle`)
