@@ -1,11 +1,9 @@
 """FastAPI application for the Drive proxy worker.
 
-Orchestrates auth checking, R2 cache lookups, Google Drive path
-resolution, Durable Object coordination (downloader / waiter roles),
-and streaming responses back to clients.
-
-This module is intentionally decoupled from the Cloudflare entry-point
-wiring so that ``entry.py`` stays a thin shell.
+This module focuses on HTTP concerns: routing, request parsing,
+exception handling, and shaping responses (including streaming from
+R2). The work of resolving Drive paths, coordinating concurrent
+downloads, and populating the R2 cache lives in ``serve.py``.
 """
 
 from __future__ import annotations
@@ -17,10 +15,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from js import Headers, Uint8Array, console
 from pyodide.ffi import JsProxy
 
-from coordinator import coordinate
-from drive import download_drive_file, resolve_drive_path
-from google_auth import get_access_token
-from helpers import to_js
+from serve import DownloadError, NotFoundError, ensure_cached
 
 app = FastAPI()
 
@@ -42,76 +37,20 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/{path:path}")
 async def handle(request: Request, path: str):
-    """Main request handler — resolve a Drive path, cache in R2, and serve."""
+    """Resolve a Drive path, ensure it's cached in R2, and stream it back."""
     if not path:
         raise HTTPException(status_code=400, detail="Path required")
 
     env = request.scope["env"]
 
-    # Normalise to an R2 key (lowercase, no leading slash)
-    r2_key = path.lower()
-    path_segments = [seg for seg in path.split("/") if seg]
-    filename = path_segments[-1] if path_segments else "download"
-
-    # ── R2 cache check ───────────────────────────────────────────────
-    cached = await env.CACHE.head(r2_key)
-    if cached:
-        console.log(f"R2 cache hit: {r2_key}")
-        return await _serve_from_r2(env, r2_key)
-
-    console.log(f"R2 cache miss: {r2_key}")
-
-    # ── Resolve Drive file ID (fast-fail on 404) ─────────────────────
-    sa_json = str(env.GOOGLE_SERVICE_ACCOUNT)
-    token = await get_access_token(sa_json)
-    drive_root = str(env.DRIVE_ROOT_ID)
-
-    file_info = await resolve_drive_path(path_segments, drive_root, token)
-    if file_info is None:
-        raise HTTPException(status_code=404, detail="File not found in Google Drive")
-
-    file_id: str = str(file_info["id"])
-    mime_type: str = str(file_info.get("mimeType") or "application/octet-stream")
-
-    # ── Coordinate via Durable Object ────────────────────────────────
     try:
-        async with coordinate(env, r2_key) as session:
-            if session.is_downloader:
-                console.log(f"Downloading Drive file {file_id} -> R2 key {r2_key}")
-                try:
-                    drive_resp = await download_drive_file(file_id, token)
-                    _ = await env.CACHE.put(
-                        r2_key,
-                        drive_resp.body,
-                        to_js(
-                            {
-                                "httpMetadata": to_js({"contentType": mime_type}),
-                                "customMetadata": to_js(
-                                    {
-                                        "filename": filename,
-                                        "driveFileId": file_id,
-                                    }
-                                ),
-                            }
-                        ),
-                    )
-                    console.log(f"R2 write complete: {r2_key}")
-                except Exception as exc:
-                    console.error(f"Download failed for {r2_key}: {exc}")
-                    raise
-            else:
-                console.log(f"Waiting for download: {r2_key}")
-                await session.wait()
-                console.log(f"Download complete (waiter): {r2_key}")
-    except RuntimeError as exc:
-        # Waiter saw an error from the downloader.
-        console.error(f"Download error (waiter) for {r2_key}: {exc}")
-        return PlainTextResponse(f"Download error: {exc}", status_code=502)
-    except Exception as exc:
-        # Downloader's own work failed; error has already been signalled.
+        result = await ensure_cached(env, path)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DownloadError as exc:
         return PlainTextResponse(f"Download failed: {exc}", status_code=502)
 
-    return await _serve_from_r2(env, r2_key)
+    return await _serve_from_r2(env, result.r2_key)
 
 
 # ---------------------------------------------------------------------------
