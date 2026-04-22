@@ -18,21 +18,6 @@ def to_js(obj: object) -> JsProxy:
     return _to_js(obj, dict_converter=Object.fromEntries)
 
 
-def safe_str(js_val: object, default: str = "") -> str:
-    """Safely convert a JS value to a Python string.
-
-    Returns *default* when the value is ``undefined``, ``null``, or otherwise
-    unusable.
-    """
-    try:
-        s = str(js_val)
-        if s in ("undefined", "null", "None", ""):
-            return default
-        return s
-    except Exception:
-        return default
-
-
 class WSClient:
     """Thin async wrapper around a Worker-side WebSocket connection.
 

@@ -26,6 +26,8 @@ class CryptoKey(JsProxy):
 class ArrayBuffer(JsProxy):
     """Opaque handle representing a JavaScript ``ArrayBuffer``."""
 
+    def to_bytes(self) -> bytes: ...
+
 # ---------------------------------------------------------------------------
 # console
 # ---------------------------------------------------------------------------
@@ -149,6 +151,7 @@ class Uint8Array:
     def __bytes__(self) -> bytes: ...
     def __iter__(self) -> Iterator[int]: ...
     def __len__(self) -> int: ...
+    def to_bytes(self) -> bytes: ...
 
 # ---------------------------------------------------------------------------
 # crypto (Web Crypto API)

@@ -17,16 +17,14 @@ import json
 import time
 from typing import cast
 
+import httpx
 from js import (
     ArrayBuffer,
     CryptoKey,
     TextEncoder,
     TextEncoderInstance,
-    Uint8Array,
     crypto,
-    fetch,
 )
-from pyodide.ffi import JsProxy
 
 from helpers import to_js
 
@@ -68,13 +66,9 @@ async def _import_private_key(pem: str) -> CryptoKey:
     )
     der_bytes = base64.b64decode(pem_body)
 
-    # Convert Python bytes → JS Uint8Array so we can hand the buffer to
-    # crypto.subtle.importKey.
-    js_bytes: JsProxy = to_js(der_bytes)
-
     return await crypto.subtle.importKey(
         "pkcs8",
-        js_bytes.buffer,
+        to_js(der_bytes),
         to_js({"name": "RSASSA-PKCS1-v1_5", "hash": {"name": "SHA-256"}}),
         False,
         to_js(["sign"]),
@@ -135,38 +129,29 @@ async def get_access_token(service_account_json: str) -> str:
         _encoder.encode(signing_input),
     )
 
-    # ``signature`` is a JS ArrayBuffer — wrap in Uint8Array then convert
-    # to Python bytes so we can base64url-encode with the stdlib.
-    sig_bytes = bytes(Uint8Array.new(signature))
+    # ``signature`` is a JS ArrayBuffer — convert directly to Python bytes.
+    sig_bytes = signature.to_bytes()
     jwt_token = f"{signing_input}.{_b64url_encode(sig_bytes)}"
 
     # -- Exchange JWT for an access token ---------------------------------
-    body = (
-        "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer"
-        f"&assertion={jwt_token}"
-    )
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                "assertion": jwt_token,
+            },
+        )
 
-    resp = await fetch(
-        "https://oauth2.googleapis.com/token",
-        to_js(
-            {
-                "method": "POST",
-                "headers": {"Content-Type": "application/x-www-form-urlencoded"},
-                "body": body,
-            }
-        ),
-    )
+    if resp.status_code != httpx.codes.OK:
+        raise RuntimeError(f"Token exchange failed ({resp.status_code}): {resp.text}")
 
-    if not resp.ok:
-        text = await resp.text()
-        raise RuntimeError(f"Token exchange failed ({resp.status}): {text}")
-
-    data: JsProxy = await resp.json()
-    _cached_token = str(data.access_token)
+    data = resp.json()
+    _cached_token = str(data["access_token"])
 
     expires_in = 3600
     try:
-        expires_in = int(str(data.expires_in))
+        expires_in = int(data.get("expires_in", 3600))
     except (ValueError, TypeError):
         pass
 

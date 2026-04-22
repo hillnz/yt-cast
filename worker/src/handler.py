@@ -10,11 +10,11 @@ wiring so that ``entry.py`` stays a thin shell.
 
 from __future__ import annotations
 
-from typing import AsyncIterator
+from typing import AsyncIterator, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
-from js import Headers, console
+from js import Headers, Uint8Array, console
 from pyodide.ffi import JsProxy
 
 from coordinator import coordinate
@@ -33,11 +33,6 @@ app = FastAPI()
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     console.error(f"Unhandled error: {exc}")
     return PlainTextResponse(f"Internal server error: {exc}", status_code=500)
-
-
-# ---------------------------------------------------------------------------
-# Dependencies
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -71,14 +66,12 @@ async def handle(request: Request, path: str):
     token = await get_access_token(sa_json)
     drive_root = str(env.DRIVE_ROOT_ID)
 
-    file_info: JsProxy | None = await resolve_drive_path(
-        path_segments, drive_root, token
-    )
+    file_info = await resolve_drive_path(path_segments, drive_root, token)
     if file_info is None:
         raise HTTPException(status_code=404, detail="File not found in Google Drive")
 
-    file_id: str = _safe_js_str(file_info.id)
-    mime_type: str = _safe_js_str(file_info.mimeType, "application/octet-stream")
+    file_id: str = str(file_info["id"])
+    mime_type: str = str(file_info.get("mimeType") or "application/octet-stream")
 
     # ── Coordinate via Durable Object ────────────────────────────────
     try:
@@ -134,7 +127,8 @@ async def _stream_readable(body: JsProxy) -> AsyncIterator[bytes]:
             result = await reader.read()
             if result.done:
                 break
-            yield bytes(result.value)
+            chunk = cast(Uint8Array, result.value)
+            yield chunk.to_bytes()
     finally:
         reader.releaseLock()
 
@@ -148,17 +142,16 @@ async def _serve_from_r2(env: JsProxy, r2_key: str) -> StreamingResponse:
     # Use writeHttpMetadata to extract content-type and friends.
     js_headers = Headers.new()
     _ = obj.writeHttpMetadata(js_headers)
-    content_type = _safe_js_str(
-        js_headers.get("content-type"), "application/octet-stream"
-    )
+    content_type = js_headers.get("content-type") or "application/octet-stream"
 
     headers: dict[str, str] = {"Content-Length": str(obj.size)}
 
     # Attach a Content-Disposition derived from custom metadata.
     fname: str | None = None
     try:
-        if obj.customMetadata:
-            fname = _safe_js_str(obj.customMetadata.filename) or None
+        custom = obj.customMetadata
+        if custom and custom.filename:
+            fname = str(custom.filename)
     except Exception:
         pass
     if fname:
@@ -170,15 +163,3 @@ async def _serve_from_r2(env: JsProxy, r2_key: str) -> StreamingResponse:
         media_type=content_type,
         headers=headers,
     )
-
-
-def _safe_js_str(js_val: object, default: str = "") -> str:
-    """Convert a JS value to a Python string, returning *default* for
-    ``undefined``, ``null`` and other falsy sentinels."""
-    try:
-        s = str(js_val)
-        if s in ("undefined", "null", "None", ""):
-            return default
-        return s
-    except Exception:
-        return default
