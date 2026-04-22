@@ -15,12 +15,12 @@ from typing import AsyncIterator
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from js import Headers, console
-from js import Request as JsRequest
 from pyodide.ffi import JsProxy
 
+from coordinator import coordinate
 from drive import download_drive_file, resolve_drive_path
 from google_auth import get_access_token
-from helpers import WSClient, to_js
+from helpers import to_js
 
 app = FastAPI()
 
@@ -81,102 +81,44 @@ async def handle(request: Request, path: str):
     mime_type: str = _safe_js_str(file_info.mimeType, "application/octet-stream")
 
     # ── Coordinate via Durable Object ────────────────────────────────
-    do_id: JsProxy = env.COORDINATOR.idFromName(r2_key)
-    stub: JsProxy = env.COORDINATOR.get(do_id)
-
-    ws_req = JsRequest.new(
-        "http://coordinator/ws",
-        to_js({"headers": to_js({"Upgrade": "websocket"})}),
-    )
-    do_resp: JsProxy = await stub.fetch(ws_req)
-    ws: JsProxy = do_resp.webSocket
-    _ = ws.accept()
-
-    ws_client: WSClient = WSClient(ws)
-    role_msg: dict[str, str] = await ws_client.recv()
-    role: str | None = role_msg.get("role")
-
-    if role == "downloader":
-        return await _do_download(
-            env, ws_client, r2_key, file_id, mime_type, filename, token
-        )
-    elif role == "waiter":
-        return await _do_wait(env, ws_client, r2_key)
-    else:
-        ws_client.close()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected role from coordinator: {role}",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Role handlers
-# ---------------------------------------------------------------------------
-
-
-async def _do_download(
-    env: JsProxy,
-    ws_client: WSClient,
-    r2_key: str,
-    file_id: str,
-    mime_type: str,
-    filename: str,
-    token: str,
-) -> StreamingResponse | PlainTextResponse:
-    """Downloader: fetch from Drive → stream to R2 → notify DO → serve."""
     try:
-        console.log(f"Downloading Drive file {file_id} -> R2 key {r2_key}")
-        drive_resp = await download_drive_file(file_id, token)
-
-        # Stream the response body directly into R2 (no buffering).
-        _ = await env.CACHE.put(
-            r2_key,
-            drive_resp.body,
-            to_js(
-                {
-                    "httpMetadata": to_js({"contentType": mime_type}),
-                    "customMetadata": to_js(
-                        {
-                            "filename": filename,
-                            "driveFileId": file_id,
-                        }
-                    ),
-                }
-            ),
-        )
-
-        console.log(f"R2 write complete: {r2_key}")
-        ws_client.send({"status": "done"})
-        ws_client.close()
-
-        return await _serve_from_r2(env, r2_key)
-
+        async with coordinate(env, r2_key) as session:
+            if session.is_downloader:
+                console.log(f"Downloading Drive file {file_id} -> R2 key {r2_key}")
+                try:
+                    drive_resp = await download_drive_file(file_id, token)
+                    _ = await env.CACHE.put(
+                        r2_key,
+                        drive_resp.body,
+                        to_js(
+                            {
+                                "httpMetadata": to_js({"contentType": mime_type}),
+                                "customMetadata": to_js(
+                                    {
+                                        "filename": filename,
+                                        "driveFileId": file_id,
+                                    }
+                                ),
+                            }
+                        ),
+                    )
+                    console.log(f"R2 write complete: {r2_key}")
+                except Exception as exc:
+                    console.error(f"Download failed for {r2_key}: {exc}")
+                    raise
+            else:
+                console.log(f"Waiting for download: {r2_key}")
+                await session.wait()
+                console.log(f"Download complete (waiter): {r2_key}")
+    except RuntimeError as exc:
+        # Waiter saw an error from the downloader.
+        console.error(f"Download error (waiter) for {r2_key}: {exc}")
+        return PlainTextResponse(f"Download error: {exc}", status_code=502)
     except Exception as exc:
-        console.error(f"Download failed for {r2_key}: {exc}")
-        try:
-            ws_client.send({"status": "error", "message": str(exc)})
-            ws_client.close()
-        except Exception:
-            pass
+        # Downloader's own work failed; error has already been signalled.
         return PlainTextResponse(f"Download failed: {exc}", status_code=502)
 
-
-async def _do_wait(
-    env: JsProxy, ws_client: WSClient, r2_key: str
-) -> StreamingResponse | PlainTextResponse:
-    """Waiter: hold until the downloader finishes, then serve from R2."""
-    console.log(f"Waiting for download: {r2_key}")
-    status_msg: dict[str, str] = await ws_client.recv()
-    status: str | None = status_msg.get("status")
-
-    if status == "done":
-        console.log(f"Download complete (waiter): {r2_key}")
-        return await _serve_from_r2(env, r2_key)
-
-    error: str | None = status_msg.get("message", "Download failed")
-    console.error(f"Download error (waiter) for {r2_key}: {error}")
-    return PlainTextResponse(f"Download error: {error}", status_code=502)
+    return await _serve_from_r2(env, r2_key)
 
 
 # ---------------------------------------------------------------------------

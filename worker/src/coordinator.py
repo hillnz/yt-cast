@@ -15,6 +15,8 @@ Lifecycle
 """
 
 import json
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import cast
 
 from js import Request as JsRequest
@@ -22,7 +24,7 @@ from js import WebSocket, WebSocketPair, console
 from pyodide.ffi import JsProxy
 from workers import DurableObject, Response
 
-from helpers import to_js
+from helpers import WSClient, to_js
 
 
 class Coordinator(DurableObject):
@@ -133,3 +135,101 @@ class Coordinator(DurableObject):
                 except Exception:
                     pass
         await self.ctx.storage.deleteAll()
+
+
+# ---------------------------------------------------------------------------
+# Client-side helpers
+# ---------------------------------------------------------------------------
+
+
+class CoordinatorSession:
+    """Active session with a Coordinator DO.
+
+    Exposes the assigned role and a ``wait()`` helper for waiters.  Status
+    signalling (``done`` / ``error``) and socket teardown are handled by the
+    surrounding :func:`coordinate` context manager — callers should not need
+    to touch the underlying WebSocket.
+    """
+
+    def __init__(self, ws_client: WSClient, role: str) -> None:
+        self._ws: WSClient = ws_client
+        self.role: str = role
+
+    @property
+    def is_downloader(self) -> bool:
+        return self.role == "downloader"
+
+    @property
+    def is_waiter(self) -> bool:
+        return self.role == "waiter"
+
+    async def wait(self) -> None:
+        """Block until the downloader signals completion.
+
+        Raises
+        ------
+        RuntimeError
+            If the downloader reports an error or disconnects unexpectedly.
+        """
+        status_msg: dict[str, str] = await self._ws.recv()
+        status: str | None = status_msg.get("status")
+        if status == "done":
+            return
+        message: str = status_msg.get("message", "Download failed")
+        raise RuntimeError(message)
+
+
+@asynccontextmanager
+async def coordinate(env: JsProxy, key: str) -> AsyncGenerator[CoordinatorSession]:
+    """Open a coordinated session with the Coordinator DO for *key*.
+
+    The first caller for a given key is assigned the ``downloader`` role and
+    is expected to perform the work inside the ``async with`` block.  All
+    subsequent callers are assigned ``waiter`` and should call
+    :meth:`CoordinatorSession.wait` (which blocks until the downloader
+    finishes).
+
+    Status signalling is automatic:
+
+    * Clean exit from the ``async with`` block (downloader) → sends
+      ``{"status": "done"}`` to the DO.
+    * Exception inside the block (downloader) → sends
+      ``{"status": "error", "message": str(exc)}`` and re-raises.
+    * Waiters never send status; the DO only reads from the downloader.
+
+    The WebSocket is always closed on exit.
+    """
+    do_id: JsProxy = env.COORDINATOR.idFromName(key)
+    stub: JsProxy = env.COORDINATOR.get(do_id)
+
+    ws_req = JsRequest.new(
+        "http://coordinator/ws",
+        to_js({"headers": to_js({"Upgrade": "websocket"})}),
+    )
+    do_resp: JsProxy = await stub.fetch(ws_req)
+    ws: JsProxy = do_resp.webSocket
+    _ = ws.accept()
+
+    ws_client = WSClient(ws)
+    role_msg: dict[str, str] = await ws_client.recv()
+    role: str | None = role_msg.get("role")
+
+    if role not in ("downloader", "waiter"):
+        ws_client.close()
+        raise RuntimeError(f"Unexpected role from coordinator: {role}")
+
+    session = CoordinatorSession(ws_client, role)
+    try:
+        yield session
+    except Exception as exc:
+        if session.is_downloader:
+            try:
+                ws_client.send({"status": "error", "message": str(exc)})
+            except Exception:
+                pass
+        raise
+    else:
+        if session.is_downloader:
+            ws_client.send({"status": "done"})
+    finally:
+        ws_client.close()
