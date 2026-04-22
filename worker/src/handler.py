@@ -11,10 +11,11 @@ from __future__ import annotations
 from typing import AsyncIterator, cast
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from js import Headers, Uint8Array, console
 from pyodide.ffi import JsProxy
 
+from feed_builder import FeedBuildError, FeedNotFoundError, build_channel_feed
 from serve import DownloadError, NotFoundError, ensure_cached
 
 app = FastAPI()
@@ -35,7 +36,7 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 # ---------------------------------------------------------------------------
 
 
-@app.get("/{path:path}")
+@app.get("/download/{path:path}")
 async def handle(request: Request, path: str):
     """Resolve a Drive path, ensure it's cached in R2, and stream it back."""
     if not path:
@@ -51,6 +52,38 @@ async def handle(request: Request, path: str):
         return PlainTextResponse(f"Download failed: {exc}", status_code=502)
 
     return await _serve_from_r2(env, result.r2_key)
+
+
+@app.get("/channel/{channel_id}/feed")
+async def handle_channel_feed(request: Request, channel_id: str):
+    """Build and return a podcast RSS feed for the given channel."""
+    if not channel_id:
+        raise HTTPException(status_code=400, detail="channel_id required")
+
+    env = request.scope["env"]
+
+    # Derive the worker's own base URL from the incoming request so the
+    # generated <enclosure> URLs point back at this worker regardless of
+    # which hostname / environment is serving the request.
+    base_url = f"{request.url.scheme}://{request.url.netloc}"
+    feed_url = str(request.url)
+
+    try:
+        body = await build_channel_feed(
+            env,
+            channel_id,
+            worker_base_url=base_url,
+            feed_url=feed_url,
+        )
+    except FeedNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FeedBuildError as exc:
+        return PlainTextResponse(f"Feed build failed: {exc}", status_code=502)
+
+    return Response(
+        content=body,
+        media_type="application/rss+xml; charset=utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -5,26 +5,28 @@
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["python_workers"],
   "vars": {
-    "DRIVE_ROOT_ID": ""
+    "DRIVE_ROOT_ID": "",
+    "DLP_URL": "",
+    "DLP_CONCURRENCY": "8",
   },
   "r2_buckets": [
     {
       "binding": "CACHE",
-      "bucket_name": "drive-proxy-cache"
-    }
+      "bucket_name": "drive-proxy-cache",
+    },
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "COORDINATOR",
-        "class_name": "Coordinator"
-      }
-    ]
+        "class_name": "Coordinator",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["Coordinator"]
-    }
-  ]
+      "new_sqlite_classes": ["Coordinator"],
+    },
+  ],
 }
