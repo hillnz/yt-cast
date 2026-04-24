@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "drive-proxy",
+  "name": "dlp-worker",
   "main": "src/entry.py",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["python_workers"],
@@ -12,7 +12,7 @@
   "r2_buckets": [
     {
       "binding": "CACHE",
-      "bucket_name": "drive-proxy-cache",
+      "bucket_name": "dlp-worker-cache",
     },
   ],
   "durable_objects": {

@@ -1,5 +1,5 @@
 [project]
-name = "drive-proxy"
+name = "dlp-worker"
 version = "0.1.0"
 description = "Google Drive to Cloudflare R2 proxy worker"
 requires-python = ">=3.12"

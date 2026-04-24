@@ -45,7 +45,7 @@ for type hints.
 ### 2. Create the R2 bucket
 
 ```sh
-uv run pywrangler r2 bucket create drive-proxy-cache
+uv run pywrangler r2 bucket create dlp-worker-cache
 ```
 
 ### 3. Configure variables
@@ -81,11 +81,11 @@ lifecycle rule:
 
 ```sh
 # Example: expire objects after 30 days
-uv run pywrangler r2 bucket lifecycle set drive-proxy-cache \
+uv run pywrangler r2 bucket lifecycle set dlp-worker-cache \
   --rule '{"id":"expire-30d","enabled":true,"conditions":{"age":30},"action":"Delete"}'
 ```
 
-Or configure via the Cloudflare dashboard under **R2 → drive-proxy-cache → Settings → Object lifecycle rules**.
+Or configure via the Cloudflare dashboard under **R2 → dlp-worker-cache → Settings → Object lifecycle rules**.
 
 ## Development
 
@@ -105,7 +105,7 @@ uv run pywrangler deploy
 ## Usage
 
 ```sh
-curl https://drive-proxy.<your-subdomain>.workers.dev/path/to/file.pdf
+curl https://dlp-worker.<your-subdomain>.workers.dev/path/to/file.pdf
 ```
 
 The request path maps directly to the folder structure inside the configured
@@ -133,7 +133,7 @@ Then the request path would be `/reports/2025/summary.pdf`.
 ## Project structure
 
 ```
-drive-proxy/
+dlp-worker/
 ├── src/
 │   ├── entry.py          # Cloudflare event handling (thin shell)
 │   ├── coordinator.py    # Coordinator Durable Object (WebSocket Hibernation)

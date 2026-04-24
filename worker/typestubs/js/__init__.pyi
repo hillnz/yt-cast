@@ -2,7 +2,7 @@
 
 The ``js`` module is injected by the Pyodide runtime and provides access to
 JavaScript global objects.  These stubs cover the subset used by the
-drive-proxy worker so that Pyright/Pylance can resolve imports.
+dlp-worker worker so that Pyright/Pylance can resolve imports.
 """
 
 from collections.abc import Callable, Iterator
