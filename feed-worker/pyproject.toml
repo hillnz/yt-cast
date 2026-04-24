@@ -1,0 +1,13 @@
+[project]
+name = "feed-worker"
+version = "0.1.0"
+description = "Accepts feed build requests and enqueues them onto a Cloudflare Queue"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "pydantic"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "workers-py",
+    "workers-runtime-sdk",
+]

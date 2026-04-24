@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "feed-worker",
+  "main": "src/entry.py",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["python_workers"],
+  "queues": {
+    "producers": [
+      {
+        "binding": "FEED_QUEUE",
+        "queue": "feed-worker-queue",
+      },
+    ],
+  },
+}
