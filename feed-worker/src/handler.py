@@ -39,6 +39,10 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 # ---------------------------------------------------------------------------
 
 
+def _feed_path(feed_id: str):
+    return f"{feed_id}/feed.xml"
+
+
 @app.post("/feed")
 async def create_feed(payload: FeedRequest, request: Request):
     env = request.scope["env"]
@@ -50,7 +54,7 @@ async def create_feed(payload: FeedRequest, request: Request):
 @app.get("/feed/{feed_id}")
 async def get_feed(feed_id: str, request: Request):
     env = request.scope["env"]
-    obj = await env.STORAGE.get(f"{feed_id}/feed.xml")
+    obj = await env.STORAGE.get(_feed_path(feed_id))
     if obj is None:
         return Response(status_code=404)
     await env.FEED_QUEUE.send({"feed_id": feed_id})
