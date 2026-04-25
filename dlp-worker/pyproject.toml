@@ -1,9 +1,9 @@
 [project]
 name = "dlp-worker"
 version = "0.1.0"
-description = "Google Drive to Cloudflare R2 proxy worker"
+description = "Queue consumer that builds podcast feeds and caches audio in R2"
 requires-python = ">=3.12"
-dependencies = ["fastapi", "httpx"]
+dependencies = ["httpx"]
 
 [dependency-groups]
 dev = [
