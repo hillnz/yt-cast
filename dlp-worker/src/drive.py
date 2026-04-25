@@ -1,7 +1,8 @@
 """Google Drive API client.
 
-Resolves file paths by walking segments against the Drive API and
-downloads files by ID as streaming responses.
+Resolves file paths by walking segments against the Drive API,
+downloads files by ID as streaming responses, and deletes files /
+folders by ID.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ async def resolve_drive_path(
     """Walk path segments against the Google Drive API.
 
     Starting from *root_id*, resolves each segment by querying for a child
-    with that name under the current parent.  Returns the final segment's
+    with that name under the current parent. Returns the final segment's
     file metadata dict (id, name, mimeType, size) or ``None`` when any
     segment yields zero results.
     """
@@ -33,7 +34,6 @@ async def resolve_drive_path(
         timeout=30.0,
     ) as client:
         for segment in path_segments:
-            # Escape single quotes inside the segment name for the query
             safe_name = segment.replace("\\", "\\\\").replace("'", "\\'")
             query = (
                 f"name = '{safe_name}' and '{parent_id}' in parents and trashed = false"
@@ -62,12 +62,31 @@ async def resolve_drive_path(
     return file_info
 
 
-async def download_drive_file(file_id: str, token: str) -> FetchResponse:
-    """Download a file from Google Drive by its ID.
+async def list_drive_children(parent_id: str, token: str) -> list[dict[str, Any]]:
+    """List the immediate (non-trashed) children of *parent_id*."""
+    headers = {"Authorization": f"Bearer {token}"}
 
-    Returns the workers ``FetchResponse`` whose ``.body`` is a JS
-    ``ReadableStream`` suitable for piping straight into R2.
-    """
+    async with httpx.AsyncClient(
+        base_url="https://www.googleapis.com",
+        headers=headers,
+        timeout=30.0,
+    ) as client:
+        resp = await client.get(
+            "/drive/v3/files",
+            params={
+                "q": f"'{parent_id}' in parents and trashed = false",
+                "fields": "files(id,name,mimeType,size)",
+            },
+        )
+
+    if resp.status_code != httpx.codes.OK:
+        raise RuntimeError(f"Drive API error ({resp.status_code}): {resp.text}")
+
+    return list(resp.json().get("files") or [])
+
+
+async def download_drive_file(file_id: str, token: str) -> FetchResponse:
+    """Download a file from Google Drive by its ID."""
     url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
 
     resp = await fetch(url, headers={"Authorization": f"Bearer {token}"})
@@ -77,3 +96,21 @@ async def download_drive_file(file_id: str, token: str) -> FetchResponse:
         raise RuntimeError(f"Drive download error ({resp.status}): {text}")
 
     return resp
+
+
+async def delete_drive_file(file_id: str, token: str) -> None:
+    """Permanently delete a file or folder from Drive (skips trash)."""
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient(
+        base_url="https://www.googleapis.com",
+        headers=headers,
+        timeout=30.0,
+    ) as client:
+        resp = await client.delete(f"/drive/v3/files/{file_id}")
+
+    # 204 = success, 404 = already gone (idempotent).
+    if resp.status_code not in (httpx.codes.NO_CONTENT, httpx.codes.NOT_FOUND):
+        raise RuntimeError(
+            f"Drive delete error ({resp.status_code}) for {file_id}: {resp.text}"
+        )

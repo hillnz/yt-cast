@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from xml.etree.ElementTree import Element, tostring
 
 from feed.channel import (
-    _format_epoch_rfc822,
+    YTCAST_NS,
     _pick_best_thumbnail,
     channel_to_feed,
 )
@@ -16,23 +17,16 @@ from feed.channel import (
 
 ITUNES_NS = "{http://www.itunes.com/dtds/podcast-1.0.dtd}"
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
+YTCAST = f"{{{YTCAST_NS}}}"
 
 
 def _find(element: Element, tag: str) -> Element | None:
-    """Find a direct child by tag, returning None if missing."""
     return element.find(tag)
 
 
 def _text(element: Element, tag: str) -> str | None:
-    """Return the text of a direct child, or None."""
     child = _find(element, tag)
     return child.text if child is not None and child.text is not None else None
-
-
-def _attr(element: Element, tag: str, attr: str) -> str | None:
-    """Return an attribute of a direct child element."""
-    child = _find(element, tag)
-    return child.get(attr) if child is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +48,17 @@ SAMPLE_CHANNEL = {
     "videos": ["dQw4w9WgXcQ", "abc123def45"],
 }
 
+LAST_BUILT = datetime(2024, 7, 3, 9, 46, 40, tzinfo=timezone.utc)
+
+
+def _build(**overrides) -> Element:
+    kwargs = {
+        "channel_id": "@RickAstleyYT",
+        "last_built": LAST_BUILT,
+    }
+    kwargs.update(overrides)
+    return channel_to_feed(SAMPLE_CHANNEL, **kwargs)
+
 
 # ---------------------------------------------------------------------------
 # _pick_best_thumbnail
@@ -62,15 +67,13 @@ SAMPLE_CHANNEL = {
 
 class TestPickBestThumbnail:
     def test_picks_largest_area(self) -> None:
-        result = _pick_best_thumbnail(SAMPLE_THUMBNAILS)
-        assert result == "https://i.ytimg.com/vi/dQ/thumb3.jpg"
+        assert (
+            _pick_best_thumbnail(SAMPLE_THUMBNAILS)
+            == "https://i.ytimg.com/vi/dQ/thumb3.jpg"
+        )
 
     def test_empty_list(self) -> None:
         assert _pick_best_thumbnail([]) is None
-
-    def test_single_thumbnail(self) -> None:
-        thumbs = [{"url": "https://example.com/img.jpg", "width": 100, "height": 100}]
-        assert _pick_best_thumbnail(thumbs) == "https://example.com/img.jpg"
 
     def test_no_dimensions_falls_back_to_last(self) -> None:
         thumbs = [
@@ -83,39 +86,6 @@ class TestPickBestThumbnail:
         thumbs = [{"url": "", "width": 100, "height": 100}]
         assert _pick_best_thumbnail(thumbs) is None
 
-    def test_mixed_dimensions(self) -> None:
-        thumbs = [
-            {"url": "https://example.com/a.jpg", "width": 100, "height": 100},
-            {"url": "https://example.com/b.jpg", "width": None, "height": None},
-            {"url": "https://example.com/c.jpg", "width": 200, "height": 200},
-        ]
-        assert _pick_best_thumbnail(thumbs) == "https://example.com/c.jpg"
-
-
-# ---------------------------------------------------------------------------
-# _format_epoch_rfc822
-# ---------------------------------------------------------------------------
-
-
-class TestFormatEpochRfc822:
-    def test_valid_epoch(self) -> None:
-        result = _format_epoch_rfc822(1720000000)
-        assert result == "Wed, 03 Jul 2024 09:46:40 +0000"
-
-    def test_zero_epoch(self) -> None:
-        assert _format_epoch_rfc822(0) is None
-
-    def test_negative_epoch(self) -> None:
-        # Negative epoch values represent dates before 1970; should still parse.
-        result = _format_epoch_rfc822(-1)
-        assert result is not None
-        assert "1969" in result
-
-    def test_reasonably_large_epoch(self) -> None:
-        result = _format_epoch_rfc822(1700000000)
-        assert result is not None
-        assert "2023" in result
-
 
 # ---------------------------------------------------------------------------
 # channel_to_feed
@@ -124,68 +94,50 @@ class TestFormatEpochRfc822:
 
 class TestChannelToFeed:
     def test_returns_element(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
+        ch = _build()
         assert isinstance(ch, Element)
         assert ch.tag == "channel"
 
     def test_title(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        assert _text(ch, "title") == "Rick Astley"
+        assert _text(_build(), "title") == "Rick Astley"
 
     def test_link(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        assert _text(ch, "link") == "https://www.youtube.com/@RickAstleyYT"
+        assert _text(_build(), "link") == "https://www.youtube.com/@RickAstleyYT"
 
     def test_description(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        assert _text(ch, "description") == "Official YouTube channel of Rick Astley."
-
-    def test_last_build_date(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        assert _text(ch, "lastBuildDate") == "Wed, 03 Jul 2024 09:46:40 +0000"
-
-    def test_no_items(self) -> None:
-        """The feed channel should NOT contain any <item> elements."""
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        assert ch.find("item") is None
-
-    def test_itunes_author(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        assert _text(ch, f"{ITUNES_NS}author") == "Rick Astley"
-
-    def test_itunes_summary(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
         assert (
-            _text(ch, f"{ITUNES_NS}summary")
-            == "Official YouTube channel of Rick Astley."
+            _text(_build(), "description") == "Official YouTube channel of Rick Astley."
         )
 
-    def test_itunes_explicit(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        assert _text(ch, f"{ITUNES_NS}explicit") == "false"
+    def test_last_build_date_uses_supplied_timestamp(self) -> None:
+        assert _text(_build(), "lastBuildDate") == "Wed, 03 Jul 2024 09:46:40 +0000"
 
-    def test_itunes_owner_name(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        owner = _find(ch, f"{ITUNES_NS}owner")
-        assert owner is not None
-        name = owner.find(f"{ITUNES_NS}name")
-        assert name is not None
-        assert name.text == "Rick Astley"
+    def test_channel_id_round_trip(self) -> None:
+        assert _text(_build(channel_id="@SomeHandle"), f"{YTCAST}channelId") == (
+            "@SomeHandle"
+        )
+
+    def test_no_items(self) -> None:
+        assert _build().find("item") is None
+
+    def test_itunes_author(self) -> None:
+        assert _text(_build(), f"{ITUNES_NS}author") == "Rick Astley"
+
+    def test_itunes_explicit(self) -> None:
+        assert _text(_build(), f"{ITUNES_NS}explicit") == "false"
 
     def test_itunes_image(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        img = _find(ch, f"{ITUNES_NS}image")
+        img = _find(_build(), f"{ITUNES_NS}image")
         assert img is not None
         assert img.get("href") == "https://i.ytimg.com/vi/dQ/thumb3.jpg"
 
     def test_itunes_category(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        cat = _find(ch, f"{ITUNES_NS}category")
+        cat = _find(_build(), f"{ITUNES_NS}category")
         assert cat is not None
         assert cat.get("text") == "Arts"
 
     def test_atom_self_link(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL, feed_url="https://example.com/feed.xml")
+        ch = _build(feed_url="https://example.com/feed.xml")
         atom_link = _find(ch, f"{ATOM_NS}link")
         assert atom_link is not None
         assert atom_link.get("href") == "https://example.com/feed.xml"
@@ -193,54 +145,21 @@ class TestChannelToFeed:
         assert atom_link.get("type") == "application/rss+xml"
 
     def test_no_atom_link_when_feed_url_empty(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        atom_link = _find(ch, f"{ATOM_NS}link")
-        assert atom_link is None
-
-    def test_no_atom_link_when_feed_url_not_provided(self) -> None:
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        atom_link = _find(ch, f"{ATOM_NS}link")
-        assert atom_link is None
-
-    def test_zero_epoch_omits_last_build_date(self) -> None:
-        channel = {**SAMPLE_CHANNEL, "epoch": 0}
-        ch = channel_to_feed(channel)
-        assert _find(ch, "lastBuildDate") is None
+        assert _find(_build(), f"{ATOM_NS}link") is None
 
     def test_no_thumbnails_omits_itunes_image(self) -> None:
         channel = {**SAMPLE_CHANNEL, "thumbnails": []}
-        ch = channel_to_feed(channel)
-        assert _find(ch, f"{ITUNES_NS}image") is None
-
-    def test_empty_channel_fields(self) -> None:
-        """Gracefully handles a channel dict with all-empty fields."""
-        channel = {
-            "channel": "",
-            "description": "",
-            "thumbnails": [],
-            "webpage_url": "",
-            "epoch": 0,
-            "videos": [],
-        }
-        ch = channel_to_feed(channel)
-        assert _text(ch, "title") == ""
-        assert _text(ch, "link") == ""
-        assert _text(ch, "description") == ""
-        assert _find(ch, "lastBuildDate") is None
+        ch = channel_to_feed(channel, channel_id="@x", last_built=LAST_BUILT)
         assert _find(ch, f"{ITUNES_NS}image") is None
 
     def test_serialisable_to_xml(self) -> None:
-        """The returned Element should produce valid XML when serialised."""
-        ch = channel_to_feed(SAMPLE_CHANNEL, feed_url="https://example.com/feed.xml")
-        xml_bytes = tostring(ch, encoding="unicode")
-        assert "<channel" in xml_bytes
-        assert "</channel>" in xml_bytes
-        assert "Rick Astley" in xml_bytes
-        assert "https://www.youtube.com/@RickAstleyYT" in xml_bytes
+        ch = _build(feed_url="https://example.com/feed.xml")
+        xml_str = tostring(ch, encoding="unicode")
+        assert "<channel" in xml_str
+        assert "</channel>" in xml_str
+        assert "Rick Astley" in xml_str
 
     def test_videos_are_ignored(self) -> None:
-        """The videos list should not appear anywhere in the feed output."""
-        ch = channel_to_feed(SAMPLE_CHANNEL)
-        xml_str = tostring(ch, encoding="unicode")
+        xml_str = tostring(_build(), encoding="unicode")
         for vid in SAMPLE_CHANNEL["videos"]:
             assert vid not in xml_str

@@ -1,18 +1,22 @@
-"""Cloudflare Worker entry point."""
-
 from __future__ import annotations
 
-import asgi
+from js import console
 from pyodide.ffi import JsProxy
 from workers import WorkerEntrypoint
 
-from handler import app
+from consumer import process_message
 
 __all__ = ["Default"]
 
 
 class Default(WorkerEntrypoint):
-    """Thin shell that delegates to the FastAPI app via ASGI."""
+    """Consumes feed-build messages from the feed-worker queue."""
 
-    async def fetch(self, request: JsProxy):
-        return await asgi.fetch(app, request, self.env)
+    async def queue(self, batch: JsProxy) -> None:
+        for message in batch.messages:
+            try:
+                await process_message(self.env, message.body)
+                message.ack()
+            except Exception as exc:  # noqa: BLE001 — consumer must not crash batch
+                console.error(f"Queue message failed: {exc}")
+                message.retry()

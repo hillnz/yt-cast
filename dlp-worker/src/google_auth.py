@@ -112,7 +112,7 @@ async def get_access_token(service_account_json: str) -> str:
     header: dict[str, str] = {"alg": "RS256", "typ": "JWT"}
     claims: dict[str, str | int] = {
         "iss": email,
-        "scope": "https://www.googleapis.com/auth/drive.readonly",
+        "scope": "https://www.googleapis.com/auth/drive",
         "aud": "https://oauth2.googleapis.com/token",
         "iat": now,
         "exp": now + 3600,
