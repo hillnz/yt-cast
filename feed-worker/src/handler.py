@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from js import console
 from pydantic import BaseModel, Field
 
@@ -45,3 +45,14 @@ async def create_feed(payload: FeedRequest, request: Request):
     await env.FEED_QUEUE.send({"channel": payload.channel})
     feed_id = get_feed_id(payload.channel, str(env.FEED_ID_SECRET))
     return {"feed_id": feed_id}
+
+
+@app.get("/feed/{feed_id}")
+async def get_feed(feed_id: str, request: Request):
+    env = request.scope["env"]
+    obj = await env.STORAGE.get(f"{feed_id}/feed.xml")
+    if obj is None:
+        return Response(status_code=404)
+    await env.FEED_QUEUE.send({"feed_id": feed_id})
+    content = await obj.text()
+    return Response(content=content, media_type="application/xml")

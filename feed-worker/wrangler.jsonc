@@ -4,6 +4,12 @@
   "main": "src/entry.py",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["python_workers"],
+  "r2_buckets": [
+    {
+      "binding": "STORAGE",
+      "bucket_name": "yt-cast",
+    },
+  ],
   "queues": {
     "producers": [
       {
