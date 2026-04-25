@@ -18,7 +18,6 @@ from pyodide.ffi import JsProxy
 
 from dlp import DlpClient, DlpConfig, DlpError, DlpNotFoundError
 from download import VideoDownloadError, download_video, video_exists
-from expiry import expiry_bucket
 from feed.channel import ChannelData
 from feed.item import VideoData
 from feed_builder import build_feed
@@ -81,14 +80,12 @@ async def _fetch_video_metadata(
     return [v for v in results if v is not None]
 
 
-def _public_audio_url(
-    env: JsProxy, feed_id: str, video_id: str, bucket: str
-) -> str:
+def _public_audio_url(env: JsProxy, feed_id: str, video_id: str) -> str:
     """Build the public R2 URL for a downloaded video."""
     base = str(getattr(env, "R2_PUBLIC_URL", "") or "").rstrip("/")
     if not base:
         raise RuntimeError("R2_PUBLIC_URL env var is not configured")
-    return f"{base}/{video_path(feed_id, video_id, bucket)}"
+    return f"{base}/{video_path(feed_id, video_id)}"
 
 
 async def _ensure_videos_cached(
@@ -97,18 +94,14 @@ async def _ensure_videos_cached(
     dlp: DlpClient,
     feed_id: str,
     videos: list[VideoData],
-    now: datetime,
 ) -> None:
     """Download any videos missing from R2. Failures are logged, not raised."""
     for video in videos:
         video_id = video["id"]
-        bucket = expiry_bucket(video.get("upload_date", ""), now)
-        if await video_exists(env, feed_id, video_id, bucket):
+        if await video_exists(env, feed_id, video_id):
             continue
         try:
-            await download_video(
-                env, dlp=dlp, feed_id=feed_id, video_id=video_id, bucket=bucket
-            )
+            await download_video(env, dlp=dlp, feed_id=feed_id, video_id=video_id)
         except (DlpError, VideoDownloadError) as exc:
             console.error(f"Skipping {video_id}: {exc}")
 
@@ -136,19 +129,14 @@ async def _rebuild_feed(
             + f"{len(video_ids)} videos"
         )
 
-        # Per-video metadata determines the retention bucket, so fetch
-        # it before deciding where to cache each video.
         videos = await _fetch_video_metadata(
             dlp, video_ids, _DEFAULT_VIDEO_FETCH_CONCURRENCY
         )
 
-        await _ensure_videos_cached(
-            env, dlp=dlp, feed_id=feed_id, videos=videos, now=now
-        )
+        await _ensure_videos_cached(env, dlp=dlp, feed_id=feed_id, videos=videos)
 
     def audio_url_for(video: VideoData) -> str:
-        bucket = expiry_bucket(video.get("upload_date", ""), now)
-        return _public_audio_url(env, feed_id, video["id"], bucket)
+        return _public_audio_url(env, feed_id, video["id"])
 
     body = build_feed(
         channel=channel,

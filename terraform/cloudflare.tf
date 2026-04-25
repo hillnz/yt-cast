@@ -6,8 +6,7 @@ provider "cloudflare" {
 # Shared R2 bucket
 #
 # The bucket is used by both workers: feed-worker writes feed.xml objects and
-# dlp-worker writes / streams cached audio. Lifecycle rules below enforce the
-# four expire-* prefixes the dlp-worker writes into.
+# dlp-worker writes / streams cached audio.
 # ---------------------------------------------------------------------------
 
 resource "cloudflare_r2_bucket" "yt_cast" {
@@ -22,35 +21,10 @@ resource "cloudflare_r2_bucket_lifecycle" "yt_cast" {
 
   rules = [
     {
-      id         = "expire-1d"
-      enabled    = true
-      conditions = { prefix = "expire-1d/" }
+      id      = "expire-10w"
+      enabled = true
       delete_objects_transition = {
-        condition = { type = "Age", max_age = 86400 }
-      }
-    },
-    {
-      id         = "expire-3d"
-      enabled    = true
-      conditions = { prefix = "expire-3d/" }
-      delete_objects_transition = {
-        condition = { type = "Age", max_age = 259200 }
-      }
-    },
-    {
-      id         = "expire-6d"
-      enabled    = true
-      conditions = { prefix = "expire-6d/" }
-      delete_objects_transition = {
-        condition = { type = "Age", max_age = 518400 }
-      }
-    },
-    {
-      id         = "expire-8w"
-      enabled    = true
-      conditions = { prefix = "expire-8w/" }
-      delete_objects_transition = {
-        condition = { type = "Age", max_age = 4838400 }
+        condition = { type = "Age", max_age = 6048000 }
       }
     },
   ]
