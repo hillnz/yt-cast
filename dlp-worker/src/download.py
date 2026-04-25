@@ -22,15 +22,33 @@ from google_auth import get_access_token
 from helpers import to_js
 from ytcast_shared import video_path
 
+# Custom-metadata key used to store the SponsorBlock segment hash on R2
+# objects, so a later run can tell whether the segments have changed.
+SEGMENT_HASH_METADATA_KEY = "segmentHash"
+
 
 class VideoDownloadError(Exception):
     """Raised when a video could not be archived through DLP + Drive."""
 
 
-async def video_exists(env: JsProxy, feed_id: str, video_id: str) -> bool:
-    """Return True if R2 already has the audio."""
+async def head_video(env: JsProxy, feed_id: str, video_id: str) -> JsProxy | None:
+    """Return the R2 head object for the cached audio, or ``None``."""
     head = await env.STORAGE.head(video_path(feed_id, video_id))
-    return head is not None
+    return head if head else None
+
+
+def existing_segment_hash(head: JsProxy | None) -> str | None:
+    """Return the segment hash stored on an R2 head object, if any."""
+    if head is None:
+        return None
+    custom = getattr(head, "customMetadata", None)
+    if custom is None:
+        return None
+    value = getattr(custom, SEGMENT_HASH_METADATA_KEY, None)
+    if value is None:
+        return None
+    text = str(value)
+    return text or None
 
 
 async def download_video(
@@ -39,6 +57,7 @@ async def download_video(
     dlp: DlpClient,
     feed_id: str,
     video_id: str,
+    segment_hash: str,
 ) -> None:
     """Download *video_id* through DLP, copy to R2, clean up Drive."""
     console.log(f"Archiving video via DLP: {video_id}")
@@ -77,7 +96,11 @@ async def download_video(
             {
                 "httpMetadata": to_js({"contentType": mime_type}),
                 "customMetadata": to_js(
-                    {"filename": filename, "videoId": video_id}
+                    {
+                        "filename": filename,
+                        "videoId": video_id,
+                        SEGMENT_HASH_METADATA_KEY: segment_hash,
+                    }
                 ),
             }
         ),

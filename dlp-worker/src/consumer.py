@@ -13,15 +13,26 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from js import console
 from pyodide.ffi import JsProxy
 
 from dlp import DlpClient, DlpConfig, DlpError, DlpNotFoundError
-from download import VideoDownloadError, download_video, video_exists
+from download import (
+    VideoDownloadError,
+    download_video,
+    existing_segment_hash,
+    head_video,
+)
 from feed.channel import ChannelData
 from feed.item import VideoData
 from feed_builder import build_feed
 from feed_io import read_existing_feed, write_feed
+from sponsorblock import (
+    SponsorBlockError,
+    fetch_segment_timestamps,
+    hash_segment_timestamps,
+)
 from ytcast_shared import get_feed_id, video_path
 
 # Hard cap on how many recent videos we surface per feed. Bounds Drive +
@@ -95,15 +106,45 @@ async def _ensure_videos_cached(
     feed_id: str,
     videos: list[VideoData],
 ) -> None:
-    """Download any videos missing from R2. Failures are logged, not raised."""
-    for video in videos:
-        video_id = video["id"]
-        if await video_exists(env, feed_id, video_id):
-            continue
-        try:
-            await download_video(env, dlp=dlp, feed_id=feed_id, video_id=video_id)
-        except (DlpError, VideoDownloadError) as exc:
-            console.error(f"Skipping {video_id}: {exc}")
+    """Download videos missing from R2 or whose SponsorBlock segments have
+    changed. Failures are logged, not raised."""
+    async with httpx.AsyncClient(timeout=30.0) as sb_client:
+        for video in videos:
+            video_id = video["id"]
+            head = await head_video(env, feed_id, video_id)
+
+            try:
+                segments = await fetch_segment_timestamps(sb_client, video_id)
+                new_hash = hash_segment_timestamps(segments)
+            except SponsorBlockError as exc:
+                if head is not None:
+                    console.warn(
+                        f"SponsorBlock unavailable for {video_id}, "
+                        + f"keeping cached file: {exc}"
+                    )
+                    continue
+                console.warn(
+                    f"SponsorBlock unavailable for {video_id}, "
+                    + f"downloading without hash: {exc}"
+                )
+                # Empty hash → next run with a working SB sees no stored hash
+                # and will refresh the file.
+                new_hash = ""
+
+            old_hash = existing_segment_hash(head)
+            if head is not None and old_hash == new_hash:
+                continue
+
+            try:
+                await download_video(
+                    env,
+                    dlp=dlp,
+                    feed_id=feed_id,
+                    video_id=video_id,
+                    segment_hash=new_hash,
+                )
+            except (DlpError, VideoDownloadError) as exc:
+                console.error(f"Skipping {video_id}: {exc}")
 
 
 async def _rebuild_feed(
