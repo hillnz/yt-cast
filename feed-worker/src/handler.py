@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import PlainTextResponse
 from js import console
 from pydantic import BaseModel, Field
+
 from ytcast_shared import get_feed_id
 
 app = FastAPI()
@@ -13,7 +14,7 @@ app = FastAPI()
 class FeedRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
-    video_id: str = Field(min_length=1, max_length=20)
+    channel: str = Field(min_length=1, max_length=20)
 
 
 # ---------------------------------------------------------------------------
@@ -39,8 +40,8 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
 
 
 @app.post("/feed")
-async def handle_feed(payload: FeedRequest, request: Request):
+async def create_feed(payload: FeedRequest, request: Request):
     env = request.scope["env"]
-    feed_id = get_feed_id(payload.video_id, str(env.FEED_ID_SECRET))
-    await env.FEED_QUEUE.send({"video_id": payload.video_id})
+    await env.FEED_QUEUE.send({"channel": payload.channel})
+    feed_id = get_feed_id(payload.channel, str(env.FEED_ID_SECRET))
     return {"feed_id": feed_id}
