@@ -5,7 +5,7 @@ JavaScript global objects.  These stubs cover the subset used by the
 dlp-worker worker so that Pyright/Pylance can resolve imports.
 """
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 
 from pyodide.ffi import JsProxy as JsProxy
 
@@ -106,28 +106,6 @@ class Request:
     async def json(self) -> JsProxy: ...
 
 # ---------------------------------------------------------------------------
-# WebSocketPair
-# ---------------------------------------------------------------------------
-
-class WebSocket(JsProxy):
-    def accept(self) -> None: ...
-    def send(self, message: str | bytes) -> None: ...
-    def close(self, code: int = ..., reason: str = ...) -> None: ...
-    def addEventListener(
-        self, event: str, listener: Callable[..., object] | JsProxy
-    ) -> None: ...
-    def removeEventListener(
-        self, event: str, listener: Callable[..., object] | JsProxy
-    ) -> None: ...
-
-class _WebSocketPair:
-    @staticmethod
-    def new() -> "_WebSocketPair": ...
-    def object_values(self) -> tuple[WebSocket, WebSocket]: ...
-
-WebSocketPair = _WebSocketPair
-
-# ---------------------------------------------------------------------------
 # TextEncoder / Uint8Array
 # ---------------------------------------------------------------------------
 
@@ -217,27 +195,6 @@ class Object:
     def entries(obj: JsProxy) -> JsProxy: ...
     @staticmethod
     def assign(target: JsProxy, *sources: JsProxy) -> JsObject: ...
-
-# ---------------------------------------------------------------------------
-# Cloudflare Workers runtime types (used by the ``workers`` package)
-# ---------------------------------------------------------------------------
-
-class DurableObjectStorage(JsProxy):
-    """Durable Object persistent storage API."""
-    async def get(self, key: str) -> JsProxy: ...
-    async def put(self, key: str, value: object) -> None: ...
-    async def delete(self, key: str) -> bool: ...
-    async def deleteAll(self) -> None: ...
-    async def list(self) -> JsProxy: ...
-
-class DurableObjectState(JsProxy):
-    """State object passed to Durable Object constructors."""
-
-    storage: DurableObjectStorage
-
-    def getWebSockets(self, tag: str = ...) -> JsProxy: ...
-    def acceptWebSocket(self, ws: WebSocket, tags: JsProxy = ...) -> None: ...
-    def waitUntil(self, promise: JsProxy) -> None: ...
 
 class Env(JsProxy):
     """Cloudflare Worker environment bindings (secrets, KV, R2, DO namespaces, etc.)."""

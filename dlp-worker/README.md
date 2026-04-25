@@ -1,8 +1,7 @@
 # Google Drive → Cloudflare Proxy
 
 Cloudflare Worker (Python) that proxies files from a specific Google Drive folder,
-caching them in R2 for subsequent requests. A Durable Object coordinates concurrent
-requests to prevent duplicate downloads.
+caching them in R2 for subsequent requests.
 
 ## Architecture
 
@@ -10,25 +9,17 @@ requests to prevent duplicate downloads.
 Client ──▶ Worker ──▶ R2 hit? ──▶ stream file from R2
                         │
                         ▼ (miss)
-                   Durable Object (coordinator)
-                        │
-              ┌─────────┴─────────┐
-              ▼                   ▼
-          downloader           waiter(s)
-        (fetches Drive,      (hold on WS,
-         streams to R2)     serve from R2 when done)
+                   fetch from Drive ──▶ write to R2 ──▶ stream from R2
 ```
 
-On a cache miss the first request becomes the **downloader** — it fetches the file
-from Google Drive, streams it into R2, and notifies the coordinator. Any concurrent
-requests for the same file become **waiters** — they hold a WebSocket open to the
-coordinator and serve from R2 once the download completes.
+On a cache miss the worker fetches the file from Google Drive, streams it into R2,
+then serves it from R2.
 
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - [Node.js](https://nodejs.org/) (required by Wrangler under the hood)
-- A Cloudflare account (for Durable Objects)
+- A Cloudflare account
 - A Google Cloud service account with access to the target Drive folder
 
 ## Setup
@@ -93,8 +84,7 @@ Or configure via the Cloudflare dashboard under **R2 → dlp-worker-cache → Se
 uv run pywrangler dev
 ```
 
-This starts a local development server. Note that Durable Objects and R2 are
-simulated locally via Miniflare.
+This starts a local development server. R2 is simulated locally via Miniflare.
 
 ## Deployment
 
@@ -127,7 +117,6 @@ Then the request path would be `/reports/2025/summary.pdf`.
 | File cached in R2 | Streams from R2 (fast) |
 | Cache miss, file exists in Drive | Downloads → caches → streams from R2 |
 | Cache miss, file not found in Drive | `404 Not Found` |
-| Download in progress by another request | Waits for download to finish, then streams from R2 |
 | Download fails | `502 Bad Gateway` with error detail |
 
 ## Project structure
@@ -136,11 +125,10 @@ Then the request path would be `/reports/2025/summary.pdf`.
 dlp-worker/
 ├── src/
 │   ├── entry.py          # Cloudflare event handling (thin shell)
-│   ├── coordinator.py    # Coordinator Durable Object (WebSocket Hibernation)
 │   ├── handler.py        # Core request handling logic
 │   ├── google_auth.py    # JWT signing (Web Crypto FFI) + token exchange
 │   ├── drive.py          # Google Drive API client
-│   └── helpers.py        # FFI utilities + WebSocket client wrapper
+│   └── helpers.py        # FFI utilities
 ├── wrangler.jsonc        # Cloudflare Worker configuration
 ├── pyproject.toml        # Python project configuration
 ├── .python-version       # Python version pin (3.12)
@@ -168,12 +156,6 @@ Files are streamed end-to-end without buffering the entire content in memory:
 
 This keeps memory usage constant regardless of file size, well within the
 128 MB Worker isolate limit.
-
-### Durable Object coordination
-
-The `Coordinator` DO uses the **WebSocket Hibernation API** so it incurs no
-billing while idle. It assigns exactly one downloader per file and holds all
-concurrent requests as waiters until the download completes (or fails).
 
 ## Limitations
 

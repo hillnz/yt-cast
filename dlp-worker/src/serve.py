@@ -1,14 +1,4 @@
-"""Core serving logic for the Drive proxy worker.
-
-Encapsulates the work of ensuring a Drive-backed file is present in
-the R2 cache: resolving the path against Google Drive, coordinating
-concurrent requests via a Durable Object, and writing the downloaded
-bytes back into R2.
-
-HTTP concerns (request parsing, response shaping, status codes) live
-in ``handler.py`` — this module stays framework-agnostic and raises
-typed errors that the handler maps onto HTTP responses.
-"""
+"""Core serving logic for the Drive proxy worker."""
 
 from __future__ import annotations
 
@@ -17,7 +7,6 @@ from dataclasses import dataclass
 from js import console
 from pyodide.ffi import JsProxy
 
-from coordinator import coordinate
 from drive import download_drive_file, resolve_drive_path
 from google_auth import get_access_token
 from helpers import to_js
@@ -75,30 +64,18 @@ async def ensure_cached(env: JsProxy, path: str) -> CacheResult:
     file_id: str = str(file_info["id"])
     mime_type: str = str(file_info.get("mimeType") or "application/octet-stream")
 
-    # ── Coordinate via Durable Object ────────────────────────────────
     try:
-        async with coordinate(env, r2_key) as session:
-            if session.is_downloader:
-                await _download_to_r2(
-                    env=env,
-                    r2_key=r2_key,
-                    file_id=file_id,
-                    filename=filename,
-                    mime_type=mime_type,
-                    token=token,
-                )
-            else:
-                console.log(f"Waiting for download: {r2_key}")
-                await session.wait()
-                console.log(f"Download complete (waiter): {r2_key}")
-    except RuntimeError as exc:
-        # Waiter saw an error from the downloader.
-        console.error(f"Download error (waiter) for {r2_key}: {exc}")
-        raise DownloadError(str(exc)) from exc
+        await _download_to_r2(
+            env=env,
+            r2_key=r2_key,
+            file_id=file_id,
+            filename=filename,
+            mime_type=mime_type,
+            token=token,
+        )
     except ServeError:
         raise
     except Exception as exc:
-        # Downloader's own work failed; error has already been signalled.
         raise DownloadError(str(exc)) from exc
 
     return CacheResult(r2_key=r2_key, cache_hit=False)

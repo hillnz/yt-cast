@@ -15,18 +15,4 @@
       "bucket_name": "dlp-worker-cache",
     },
   ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "COORDINATOR",
-        "class_name": "Coordinator",
-      },
-    ],
-  },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["Coordinator"],
-    },
-  ],
 }

@@ -1,8 +1,4 @@
-"""Cloudflare Worker entry point.
-
-Keeps Cloudflare-specific wiring in one place — the ``Default`` class
-bridges the Workers fetch handler to the FastAPI ASGI application.
-"""
+"""Cloudflare Worker entry point."""
 
 from __future__ import annotations
 
@@ -10,11 +6,9 @@ import asgi
 from pyodide.ffi import JsProxy
 from workers import WorkerEntrypoint
 
-# Re-export so wrangler can find the DO class via the entry module.
-from coordinator import Coordinator  # noqa: F401
 from handler import app
 
-__all__ = ["Coordinator", "Default"]
+__all__ = ["Default"]
 
 
 class Default(WorkerEntrypoint):
