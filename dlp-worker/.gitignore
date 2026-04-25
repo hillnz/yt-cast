@@ -151,11 +151,15 @@ activemq-data/
 .env
 .envrc
 .venv
+.venv-workers/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# pywrangler vendor directory
+python_modules/
 
 # Google service account credentials
 credentials.json

@@ -68,7 +68,7 @@ wheels = [
 ]
 
 [[package]]
-name = "drive-proxy"
+name = "dlp-worker"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
