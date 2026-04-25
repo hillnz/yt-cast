@@ -45,7 +45,7 @@ async def ensure_cached(env: JsProxy, path: str) -> CacheResult:
     filename = path_segments[-1] if path_segments else "download"
 
     # ── R2 cache check ───────────────────────────────────────────────
-    cached = await env.CACHE.head(r2_key)
+    cached = await env.STORAGE.head(r2_key)
     if cached:
         console.log(f"R2 cache hit: {r2_key}")
         return CacheResult(r2_key=r2_key, cache_hit=True)
@@ -94,7 +94,7 @@ async def _download_to_r2(
     console.log(f"Downloading Drive file {file_id} -> R2 key {r2_key}")
     try:
         drive_resp = await download_drive_file(file_id, token)
-        _ = await env.CACHE.put(
+        _ = await env.STORAGE.put(
             r2_key,
             drive_resp.body,
             to_js(

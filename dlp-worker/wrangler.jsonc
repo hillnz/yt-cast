@@ -11,8 +11,8 @@
   },
   "r2_buckets": [
     {
-      "binding": "CACHE",
-      "bucket_name": "dlp-worker-cache",
+      "binding": "STORAGE",
+      "bucket_name": "yt-cast",
     },
   ],
 }

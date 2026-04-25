@@ -107,7 +107,7 @@ async def _stream_readable(body: JsProxy) -> AsyncIterator[bytes]:
 
 async def _serve_from_r2(env: JsProxy, r2_key: str) -> StreamingResponse:
     """Stream a cached file from R2 back to the client."""
-    obj: JsProxy = await env.CACHE.get(r2_key)
+    obj: JsProxy = await env.STORAGE.get(r2_key)
     if not obj:
         raise HTTPException(status_code=404, detail="File not found in cache")
 
