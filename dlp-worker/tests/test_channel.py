@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from xml.etree.ElementTree import Element, tostring
 
 from feed.channel import (
-    YTCAST_NS,
     _pick_best_thumbnail,
     channel_to_feed,
 )
@@ -17,7 +16,6 @@ from feed.channel import (
 
 ITUNES_NS = "{http://www.itunes.com/dtds/podcast-1.0.dtd}"
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
-YTCAST = f"{{{YTCAST_NS}}}"
 
 
 def _find(element: Element, tag: str) -> Element | None:
@@ -53,7 +51,6 @@ LAST_BUILT = datetime(2024, 7, 3, 9, 46, 40, tzinfo=timezone.utc)
 
 def _build(**overrides) -> Element:
     kwargs = {
-        "channel_id": "@RickAstleyYT",
         "last_built": LAST_BUILT,
     }
     kwargs.update(overrides)
@@ -112,11 +109,6 @@ class TestChannelToFeed:
     def test_last_build_date_uses_supplied_timestamp(self) -> None:
         assert _text(_build(), "lastBuildDate") == "Wed, 03 Jul 2024 09:46:40 +0000"
 
-    def test_channel_id_round_trip(self) -> None:
-        assert _text(_build(channel_id="@SomeHandle"), f"{YTCAST}channelId") == (
-            "@SomeHandle"
-        )
-
     def test_no_items(self) -> None:
         assert _build().find("item") is None
 
@@ -149,7 +141,7 @@ class TestChannelToFeed:
 
     def test_no_thumbnails_omits_itunes_image(self) -> None:
         channel = {**SAMPLE_CHANNEL, "thumbnails": []}
-        ch = channel_to_feed(channel, channel_id="@x", last_built=LAST_BUILT)
+        ch = channel_to_feed(channel, last_built=LAST_BUILT)
         assert _find(ch, f"{ITUNES_NS}image") is None
 
     def test_serialisable_to_xml(self) -> None:

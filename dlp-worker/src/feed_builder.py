@@ -12,7 +12,7 @@ from typing import Callable
 from xml.etree.ElementTree import Element, tostring
 
 from feed import channel_to_feed, video_to_item
-from feed.channel import ChannelData, YTCAST_NS
+from feed.channel import ChannelData
 from feed.item import VideoData
 
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
@@ -24,7 +24,6 @@ _AUDIO_MIME_TYPE = "audio/mp4"
 def build_feed(
     *,
     channel: ChannelData,
-    channel_id: str,
     videos: list[VideoData],
     audio_url_for: Callable[[VideoData], str],
     last_built: datetime,
@@ -33,7 +32,6 @@ def build_feed(
     """Render a podcast RSS document as UTF-8 bytes."""
     channel_element = channel_to_feed(
         channel,
-        channel_id=channel_id,
         last_built=last_built,
         feed_url=feed_url,
     )
@@ -52,7 +50,6 @@ def build_feed(
             "version": "2.0",
             "xmlns:itunes": _ITUNES_NS,
             "xmlns:atom": _ATOM_NS,
-            "xmlns:ytcast": YTCAST_NS,
         },
     )
     rss.append(channel_element)

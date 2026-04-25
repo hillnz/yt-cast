@@ -152,12 +152,11 @@ async def _rebuild_feed(
 
     body = build_feed(
         channel=channel,
-        channel_id=channel_id,
         videos=videos,
         audio_url_for=audio_url_for,
         last_built=now,
     )
-    await write_feed(env, feed_id, body)
+    await write_feed(env, feed_id, body, channel_id=channel_id, last_built=now)
     console.log(f"Feed published: feed_id={feed_id}")
 
 

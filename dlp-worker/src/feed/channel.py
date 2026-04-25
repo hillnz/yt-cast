@@ -32,8 +32,6 @@ class ChannelData(TypedDict):
 
 # iTunes podcast namespace URI used for Apple Podcasts extensions.
 _ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd"
-# Custom yt-cast namespace for fields we round-trip through the feed.
-YTCAST_NS = "https://yt-cast.invalid/ns"
 
 
 def _pick_best_thumbnail(thumbnails: list[ThumbnailData]) -> str | None:
@@ -66,7 +64,6 @@ def _format_rfc822(dt: datetime) -> str:
 def channel_to_feed(
     channel: ChannelData,
     *,
-    channel_id: str,
     last_built: datetime,
     feed_url: str = "",
 ) -> Element:
@@ -77,13 +74,8 @@ def channel_to_feed(
     ----------
     channel:
         Channel metadata from the DLP API.
-    channel_id:
-        The original channel handle/ID supplied by the user. Stored in a
-        custom ``<ytcast:channelId>`` element so it can be recovered
-        from a parsed feed without keeping a side table.
     last_built:
-        Timestamp this feed build represents. Written to ``<lastBuildDate>``
-        and used by the consumer to throttle rebuilds.
+        Timestamp this feed build represents. Written to ``<lastBuildDate>``.
     feed_url:
         Canonical URL of this feed (Atom self-link).
     """
@@ -98,8 +90,6 @@ def channel_to_feed(
     SubElement(ch, "link").text = webpage_url
     SubElement(ch, "description").text = description
     SubElement(ch, "lastBuildDate").text = _format_rfc822(last_built)
-
-    SubElement(ch, f"{{{YTCAST_NS}}}channelId").text = channel_id
 
     if feed_url:
         atom_link = SubElement(ch, "{http://www.w3.org/2005/Atom}link")
