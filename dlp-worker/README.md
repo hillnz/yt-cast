@@ -65,18 +65,41 @@ uv run pywrangler secret put GOOGLE_SERVICE_ACCOUNT
    (grant at least **Viewer** access).
 4. Store the full JSON key as the `GOOGLE_SERVICE_ACCOUNT` secret (above).
 
-### 5. R2 lifecycle rule (optional)
+### 5. R2 lifecycle rules (required)
 
-To automatically expire cached files after a set number of days, configure an R2
-lifecycle rule:
+Cached video objects are written under one of four prefixes, chosen at download
+time based on the age of the YouTube video. Each prefix needs a matching
+"delete after N days" lifecycle rule on the R2 bucket — without these rules
+nothing is ever deleted.
+
+| Prefix | Applies to videos uploaded… | Retention |
+| --- | --- | --- |
+| `expire-1d/` | within the last 3 days | 1 day |
+| `expire-3d/` | within the last 7 days | 3 days |
+| `expire-6d/` | within the last 14 days | 6 days |
+| `expire-8w/` | older than 14 days | 56 days |
+
+When a video ages past a bucket boundary the next feed rebuild re-downloads
+it into the new bucket; the stale copy is deleted by the previous bucket's
+lifecycle rule.
+
+Configure the rules via the Cloudflare dashboard
+(**R2 → yt-cast → Settings → Object lifecycle rules**) or the API. Example
+using `wrangler`:
 
 ```sh
-# Example: expire objects after 30 days
-uv run pywrangler r2 bucket lifecycle set dlp-worker-cache \
-  --rule '{"id":"expire-30d","enabled":true,"conditions":{"age":30},"action":"Delete"}'
+uv run pywrangler r2 bucket lifecycle add yt-cast --id expire-1d \
+  --prefix expire-1d/ --expire-days 1
+uv run pywrangler r2 bucket lifecycle add yt-cast --id expire-3d \
+  --prefix expire-3d/ --expire-days 3
+uv run pywrangler r2 bucket lifecycle add yt-cast --id expire-6d \
+  --prefix expire-6d/ --expire-days 6
+uv run pywrangler r2 bucket lifecycle add yt-cast --id expire-8w \
+  --prefix expire-8w/ --expire-days 56
 ```
 
-Or configure via the Cloudflare dashboard under **R2 → dlp-worker-cache → Settings → Object lifecycle rules**.
+`feed.xml` documents live at `{feed_id}/feed.xml` (no `expire-*` prefix) and
+are unaffected by these rules.
 
 ## Development
 

@@ -2,7 +2,8 @@
 
 For each video this module:
   1. Asks the DLP service to archive it (DLP uploads to Drive).
-  2. Streams the file from Drive into R2 under ``{feed_id}/{video_id}``.
+  2. Streams the file from Drive into R2 under ``{bucket}/{feed_id}/{video_id}``,
+     where *bucket* is the lifecycle prefix that controls retention.
   3. Deletes the per-video Drive folder so the archive doesn't grow.
 """
 
@@ -27,9 +28,11 @@ class VideoDownloadError(Exception):
     """Raised when a video could not be archived through DLP + Drive."""
 
 
-async def video_exists(env: JsProxy, feed_id: str, video_id: str) -> bool:
-    """Return True if R2 already has the audio for *video_id*."""
-    head = await env.STORAGE.head(video_path(feed_id, video_id))
+async def video_exists(
+    env: JsProxy, feed_id: str, video_id: str, bucket: str
+) -> bool:
+    """Return True if R2 already has the audio under *bucket*."""
+    head = await env.STORAGE.head(video_path(feed_id, video_id, bucket))
     return head is not None
 
 
@@ -39,6 +42,7 @@ async def download_video(
     dlp: DlpClient,
     feed_id: str,
     video_id: str,
+    bucket: str,
 ) -> None:
     """Download *video_id* through DLP, copy to R2, clean up Drive."""
     console.log(f"Archiving video via DLP: {video_id}")
@@ -71,7 +75,7 @@ async def download_video(
 
     drive_resp = await download_drive_file(file_id, token)
     await env.STORAGE.put(
-        video_path(feed_id, video_id),
+        video_path(feed_id, video_id, bucket),
         drive_resp.body,
         to_js(
             {
@@ -82,7 +86,7 @@ async def download_video(
             }
         ),
     )
-    console.log(f"R2 write complete: {video_path(feed_id, video_id)}")
+    console.log(f"R2 write complete: {video_path(feed_id, video_id, bucket)}")
 
     await delete_drive_file(folder_id, token)
     console.log(f"Drive folder deleted: {video_id}")

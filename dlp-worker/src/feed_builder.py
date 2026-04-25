@@ -26,7 +26,7 @@ def build_feed(
     channel: ChannelData,
     channel_id: str,
     videos: list[VideoData],
-    audio_url_for: Callable[[str], str],
+    audio_url_for: Callable[[VideoData], str],
     last_built: datetime,
     feed_url: str = "",
 ) -> bytes:
@@ -41,7 +41,7 @@ def build_feed(
         channel_element.append(
             video_to_item(
                 video,
-                audio_url_for(video["id"]),
+                audio_url_for(video),
                 mime_type=_AUDIO_MIME_TYPE,
             )
         )
