@@ -26,10 +26,6 @@ provider "google" {
   region  = var.gcp_region
 }
 
-provider "cloudflare" {
-  api_token = var.cloudflare_api_token
-}
-
 # ---------------------------------------------------------------------------
 # Variables (mirrors terraform/variables.tf)
 # ---------------------------------------------------------------------------
@@ -64,11 +60,6 @@ variable "dlp_extra" {
 
 variable "cloudflare_account_id" {
   type = string
-}
-
-variable "cloudflare_api_token" {
-  type      = string
-  sensitive = true
 }
 
 variable "r2_public_hostname" {
@@ -144,6 +135,7 @@ output "dlp_service_account_email" {
 output "drive_service_account_email" {
   description = "Email of the service account that needs Editor access to the Drive folder identified by drive_root_id. Share that folder with this email."
   value       = module.main.drive_service_account_email
+  sensitive   = true
 }
 
 output "r2_bucket_name" {

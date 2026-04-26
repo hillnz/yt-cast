@@ -64,7 +64,6 @@ resource "null_resource" "feed_worker_deploy" {
       printf '%s' "$FEED_ID_SECRET" | uv run pywrangler secret put FEED_ID_SECRET
     EOT
     environment = {
-      CLOUDFLARE_API_TOKEN  = var.cloudflare_api_token
       CLOUDFLARE_ACCOUNT_ID = var.cloudflare_account_id
       FEED_ID_SECRET        = random_password.feed_id_secret.result
     }
@@ -102,7 +101,6 @@ resource "null_resource" "dlp_worker_deploy" {
       printf '%s' "$GOOGLE_SERVICE_ACCOUNT" | uv run pywrangler secret put GOOGLE_SERVICE_ACCOUNT
     EOT
     environment = {
-      CLOUDFLARE_API_TOKEN   = var.cloudflare_api_token
       CLOUDFLARE_ACCOUNT_ID  = var.cloudflare_account_id
       DRIVE_ROOT_ID          = var.drive_root_id
       DLP_URL                = module.dlp.uri
