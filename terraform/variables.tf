@@ -45,12 +45,6 @@ variable "cloudflare_account_id" {
   type        = string
 }
 
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token with R2 + Queues + Workers Scripts read/write. Used both by the Cloudflare provider and by pywrangler when deploying the workers."
-  type        = string
-  sensitive   = true
-}
-
 variable "r2_public_hostname" {
   description = "Public hostname for the R2 bucket (e.g. media.example.com). Terraform attaches this as a Cloudflare R2 custom domain on the bucket and adds a zone-level cache rule. The dlp-worker is given https://{hostname} as R2_PUBLIC_URL."
   type        = string
