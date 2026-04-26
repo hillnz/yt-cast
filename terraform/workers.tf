@@ -44,7 +44,7 @@ locals {
   dlp_worker_runtime_vars = {
     DRIVE_ROOT_ID = var.drive_root_id
     DLP_URL       = module.dlp.uri
-    R2_PUBLIC_URL = var.r2_public_url
+    R2_PUBLIC_URL = local.r2_public_url
   }
 }
 
@@ -106,7 +106,7 @@ resource "null_resource" "dlp_worker_deploy" {
       CLOUDFLARE_ACCOUNT_ID  = var.cloudflare_account_id
       DRIVE_ROOT_ID          = var.drive_root_id
       DLP_URL                = module.dlp.uri
-      R2_PUBLIC_URL          = var.r2_public_url
+      R2_PUBLIC_URL          = local.r2_public_url
       DLP_BEARER_TOKEN       = random_password.dlp_bearer_token.result
       FEED_ID_SECRET         = random_password.feed_id_secret.result
       GOOGLE_SERVICE_ACCOUNT = var.google_service_account_json
@@ -115,6 +115,7 @@ resource "null_resource" "dlp_worker_deploy" {
 
   depends_on = [
     cloudflare_r2_bucket.yt_cast,
+    cloudflare_r2_custom_domain.yt_cast,
     cloudflare_queue.feed,
     module.dlp,
   ]

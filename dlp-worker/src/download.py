@@ -26,6 +26,10 @@ from ytcast_shared import video_path
 # objects, so a later run can tell whether the segments have changed.
 SEGMENT_HASH_METADATA_KEY = "segmentHash"
 
+# Audio files are immutable once written for a given segment hash, so cache
+# them aggressively at the Cloudflare edge and in client podcast apps.
+_AUDIO_CACHE_CONTROL = "public, max-age=86400"
+
 
 class VideoDownloadError(Exception):
     """Raised when a video could not be archived through DLP + Drive."""
@@ -128,7 +132,12 @@ async def download_video(
         drive_resp.body,
         to_js(
             {
-                "httpMetadata": to_js({"contentType": mime_type}),
+                "httpMetadata": to_js(
+                    {
+                        "contentType": mime_type,
+                        "cacheControl": _AUDIO_CACHE_CONTROL,
+                    }
+                ),
                 "customMetadata": to_js(
                     {
                         "filename": filename,

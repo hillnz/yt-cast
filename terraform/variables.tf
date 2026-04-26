@@ -51,8 +51,13 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
-variable "r2_public_url" {
-  description = "Public base URL serving objects from the R2 bucket (e.g. a custom domain like https://media.example.com). Injected as R2_PUBLIC_URL into the dlp-worker."
+variable "r2_public_hostname" {
+  description = "Public hostname for the R2 bucket (e.g. media.example.com). Terraform attaches this as a Cloudflare R2 custom domain on the bucket and adds a zone-level cache rule. The dlp-worker is given https://{hostname} as R2_PUBLIC_URL."
+  type        = string
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID that owns r2_public_hostname. Required for the R2 custom domain attachment and the cache ruleset."
   type        = string
 }
 

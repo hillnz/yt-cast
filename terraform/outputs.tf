@@ -13,6 +13,11 @@ output "r2_bucket_name" {
   value       = cloudflare_r2_bucket.yt_cast.name
 }
 
+output "r2_public_url" {
+  description = "Public base URL serving objects from the R2 bucket via the custom domain."
+  value       = local.r2_public_url
+}
+
 output "queue_name" {
   description = "Name of the shared Cloudflare Queue."
   value       = cloudflare_queue.feed.queue_name

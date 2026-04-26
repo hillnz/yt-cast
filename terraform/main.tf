@@ -4,7 +4,8 @@ provider "google" {
 }
 
 locals {
-  repo_root = var.repo_root != null ? var.repo_root : "${path.module}/.."
+  repo_root     = var.repo_root != null ? var.repo_root : "${path.module}/.."
+  r2_public_url = "https://${var.r2_public_hostname}"
 }
 
 # ---------------------------------------------------------------------------

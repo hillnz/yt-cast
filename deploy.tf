@@ -71,7 +71,11 @@ variable "cloudflare_api_token" {
   sensitive = true
 }
 
-variable "r2_public_url" {
+variable "r2_public_hostname" {
+  type = string
+}
+
+variable "cloudflare_zone_id" {
   type = string
 }
 
@@ -114,7 +118,8 @@ module "main" {
   dlp_extra                   = var.dlp_extra
   cloudflare_account_id       = var.cloudflare_account_id
   cloudflare_api_token        = var.cloudflare_api_token
-  r2_public_url               = var.r2_public_url
+  cloudflare_zone_id          = var.cloudflare_zone_id
+  r2_public_hostname          = var.r2_public_hostname
   feed_worker_name            = var.feed_worker_name
   dlp_worker_name             = var.dlp_worker_name
   drive_root_id               = var.drive_root_id
@@ -139,6 +144,11 @@ output "dlp_service_account_email" {
 output "r2_bucket_name" {
   description = "Name of the shared R2 bucket."
   value       = module.main.r2_bucket_name
+}
+
+output "r2_public_url" {
+  description = "Public base URL serving objects from the R2 bucket via the custom domain."
+  value       = module.main.r2_public_url
 }
 
 output "queue_name" {

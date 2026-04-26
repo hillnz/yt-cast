@@ -10,6 +10,11 @@ from pyodide.ffi import JsProxy
 from helpers import to_js
 from ytcast_shared import feed_path
 
+# Short edge / client cache so a few back-to-back polls collapse to a single
+# origin hit, but new episodes still surface promptly. Audio files use a much
+# longer TTL since they're immutable per segment hash.
+_FEED_CACHE_CONTROL = "public, max-age=300"
+
 
 @dataclass(frozen=True)
 class ExistingFeed:
@@ -68,7 +73,12 @@ async def write_feed(
         to_js(body),
         to_js(
             {
-                "httpMetadata": to_js({"contentType": "application/rss+xml"}),
+                "httpMetadata": to_js(
+                    {
+                        "contentType": "application/rss+xml",
+                        "cacheControl": _FEED_CACHE_CONTROL,
+                    }
+                ),
                 "customMetadata": to_js(
                     {
                         "channelId": channel_id,
