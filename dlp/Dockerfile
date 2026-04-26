@@ -9,7 +9,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY app/ ./app/
 
 
-FROM python:3.12-alpine AS runtime
+FROM python:3.12.13-alpine AS runtime
 
 # ffmpeg (required by yt-dlp for audio extraction / post-processing)
 # quickjs (required by yt-dlp-ejs for full YouTube support)
