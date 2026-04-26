@@ -117,7 +117,6 @@ module "main" {
   dlp_allow_unauthenticated   = var.dlp_allow_unauthenticated
   dlp_extra                   = var.dlp_extra
   cloudflare_account_id       = var.cloudflare_account_id
-  cloudflare_api_token        = var.cloudflare_api_token
   cloudflare_zone_id          = var.cloudflare_zone_id
   r2_public_hostname          = var.r2_public_hostname
   feed_worker_name            = var.feed_worker_name
