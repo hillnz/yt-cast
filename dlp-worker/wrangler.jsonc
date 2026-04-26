@@ -2,8 +2,8 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "dlp-worker",
   "main": "src/entry.py",
-  "compatibility_date": "2025-06-01",
-  "compatibility_flags": ["python_workers"],
+  "compatibility_date": "2025-11-02",
+  "compatibility_flags": ["python_workers", "python_dedicated_snapshot"],
   "vars": {
     "DRIVE_ROOT_ID": "",
     "DLP_URL": "",
