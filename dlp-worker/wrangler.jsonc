@@ -21,6 +21,11 @@
         "queue": "feed-worker-queue",
         "max_batch_size": 1,
         "max_concurrency": 1,
+        // Drop messages after 3 failed attempts. No DLQ configured —
+        // permanent failures are ack'd in code; only truly transient
+        // errors fall back on this retry budget.
+        "max_retries": 3,
+        "retry_delay": 60,
       },
     ],
   },

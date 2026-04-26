@@ -46,6 +46,35 @@ MIN_REBUILD_INTERVAL = timedelta(hours=1)
 # Concurrency for parallel /video/{id} metadata fetches.
 _DEFAULT_VIDEO_FETCH_CONCURRENCY = 4
 
+# Env vars that must be set for any message to be processable. If any is
+# missing the deploy is broken — retrying won't help, so we drop the
+# message rather than spin on it until the queue retry budget is exhausted.
+_REQUIRED_ENV_VARS: tuple[str, ...] = (
+    "DLP_URL",
+    "R2_PUBLIC_URL",
+    "DRIVE_ROOT_ID",
+    "FEED_ID_SECRET",
+    "GOOGLE_SERVICE_ACCOUNT",
+)
+
+
+class PermanentMessageError(Exception):
+    """Raised when a queue message cannot be processed and retrying won't
+    help (e.g. misconfiguration, malformed input). The entrypoint acks
+    these messages so they are dropped from the queue."""
+
+
+def _validate_env(env: JsProxy) -> None:
+    missing = [
+        name
+        for name in _REQUIRED_ENV_VARS
+        if not str(getattr(env, name, "") or "")
+    ]
+    if missing:
+        raise PermanentMessageError(
+            "Required env vars not configured: " + ", ".join(missing)
+        )
+
 
 @dataclass(frozen=True)
 class QueueInput:
@@ -191,6 +220,7 @@ async def _rebuild_feed(
 
 async def process_message(env: JsProxy, body: object) -> None:
     """Handle a single queue message end-to-end."""
+    _validate_env(env)
     msg = _parse_message(body)
 
     if msg.channel:

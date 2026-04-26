@@ -31,7 +31,7 @@ async def _validation_exception_handler(request: Request, exc: RequestValidation
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     console.error(f"Unhandled error: {exc}")
-    return PlainTextResponse(f"Internal server error: {exc}", status_code=500)
+    return PlainTextResponse("Internal Server Error", status_code=500)
 
 
 # ---------------------------------------------------------------------------
