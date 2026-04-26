@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Hit the IAM-protected dlp Cloud Run service from your local machine using
+# your active gcloud identity. Mints an audience-bound ID token by
+# impersonating the dlp invoker service account — Cloud Run requires
+# audience-scoped ID tokens, and gcloud only supports --audiences when the
+# active credentials are a service account, so we impersonate.
+#
+# Usage:
+#   scripts/dlp-curl <path> [curl args ...]
+#
+# Examples:
+#   scripts/dlp-curl /channel/macbreakweekly
+#   scripts/dlp-curl /channel/macbreakweekly -v
+#   scripts/dlp-curl /download -X POST -H 'Content-Type: application/json' \
+#                              -d '{"video_id":"dQw4w9WgXcQ"}'
+#
+# The base URL and impersonation SA are read from terraform outputs. Override
+# with DLP_URL=... and DLP_IMPERSONATE_SA=... in the environment if needed.
+#
+# Your gcloud user needs roles/iam.serviceAccountTokenCreator on the SA.
+# Project owners have it automatically.
+
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "usage: $(basename "$0") <path> [curl args...]" >&2
+  exit 64
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+tf_output() {
+  (cd "$repo_root" && terraform output -raw "$1" 2>/dev/null || true)
+}
+
+url="${DLP_URL:-$(tf_output dlp_url)}"
+url="${url%/}"
+if [[ -z "$url" ]]; then
+  echo "error: DLP_URL not set and 'terraform output -raw dlp_url' failed" >&2
+  exit 1
+fi
+
+sa="${DLP_IMPERSONATE_SA:-$(tf_output drive_service_account_email)}"
+if [[ -z "$sa" ]]; then
+  echo "error: DLP_IMPERSONATE_SA not set and 'terraform output -raw drive_service_account_email' failed" >&2
+  exit 1
+fi
+
+token="$(gcloud auth print-identity-token \
+  --impersonate-service-account="$sa" \
+  --audiences="$url")"
+
+path="$1"
+shift
+[[ "$path" == /* ]] || path="/$path"
+
+exec curl -H "Authorization: Bearer $token" "$url$path" "$@"

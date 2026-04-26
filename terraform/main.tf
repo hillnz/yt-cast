@@ -41,7 +41,7 @@ locals {
     ? var.google_service_account_json
     : base64decode(google_service_account_key.drive[0].private_key)
   )
-  drive_service_account_email = (
+  drive_service_account_email = nonsensitive(
     var.google_service_account_json != null
     ? jsondecode(var.google_service_account_json).client_email
     : google_service_account.drive[0].email
