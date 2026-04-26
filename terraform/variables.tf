@@ -51,16 +51,6 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
-variable "bucket_location" {
-  description = "R2 bucket location hint (only honoured on initial creation)."
-  type        = string
-  default     = "wnam"
-  validation {
-    condition     = contains(["apac", "eeur", "enam", "weur", "wnam", "oc"], var.bucket_location)
-    error_message = "bucket_location must be one of apac, eeur, enam, weur, wnam, oc."
-  }
-}
-
 variable "r2_public_url" {
   description = "Public base URL serving objects from the R2 bucket (e.g. a custom domain like https://media.example.com). Injected as R2_PUBLIC_URL into the dlp-worker."
   type        = string

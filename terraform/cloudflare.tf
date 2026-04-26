@@ -18,7 +18,6 @@ provider "cloudflare" {
 resource "cloudflare_r2_bucket" "yt_cast" {
   account_id = var.cloudflare_account_id
   name       = "yt-cast"
-  location   = var.bucket_location
 }
 
 resource "cloudflare_r2_bucket_lifecycle" "yt_cast" {

@@ -71,15 +71,6 @@ variable "cloudflare_api_token" {
   sensitive = true
 }
 
-variable "bucket_location" {
-  type    = string
-  default = "wnam"
-  validation {
-    condition     = contains(["apac", "eeur", "enam", "weur", "wnam", "oc"], var.bucket_location)
-    error_message = "bucket_location must be one of apac, eeur, enam, weur, wnam, oc."
-  }
-}
-
 variable "r2_public_url" {
   type = string
 }
@@ -123,7 +114,6 @@ module "main" {
   dlp_extra                   = var.dlp_extra
   cloudflare_account_id       = var.cloudflare_account_id
   cloudflare_api_token        = var.cloudflare_api_token
-  bucket_location             = var.bucket_location
   r2_public_url               = var.r2_public_url
   feed_worker_name            = var.feed_worker_name
   dlp_worker_name             = var.dlp_worker_name
