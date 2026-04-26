@@ -37,3 +37,9 @@ output "dlp_worker_name" {
   description = "Name of the deployed dlp-worker."
   value       = var.dlp_worker_name
 }
+
+output "dlp_bearer_token" {
+  description = "Bearer token for the dlp Cloud Run service."
+  value       = random_password.dlp_bearer_token.result
+  sensitive   = true
+}

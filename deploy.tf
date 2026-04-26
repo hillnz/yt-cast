@@ -162,3 +162,9 @@ output "dlp_worker_name" {
   description = "Name of the deployed dlp-worker."
   value       = module.main.dlp_worker_name
 }
+
+output "dlp_bearer_token" {
+  description = "Bearer token for the dlp Cloud Run service."
+  value       = module.main.dlp_bearer_token
+  sensitive   = true
+}
