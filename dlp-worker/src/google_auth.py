@@ -12,21 +12,25 @@ imported ``CryptoKey`` at module level so they survive across requests
 within the same isolate, avoiding redundant JWT minting.
 """
 
+from __future__ import annotations
+
 import base64
 import json
 import time
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import httpx
 from js import (
     ArrayBuffer,
     CryptoKey,
     TextEncoder,
-    TextEncoderInstance,
     crypto,
 )
 
 from helpers import to_js
+
+if TYPE_CHECKING:
+    from js import TextEncoderInstance
 
 # ---------------------------------------------------------------------------
 # Module-level caches (persist across requests within the same isolate)
@@ -36,7 +40,17 @@ _token_expiry: int = 0
 _imported_key: CryptoKey | None = None
 _key_email: str | None = None
 
-_encoder: TextEncoderInstance = TextEncoder.new()
+# Lazily constructed: the dedicated snapshot taken at deploy time can't
+# serialise JS proxies, so we can't hold a TextEncoder instance at module
+# level.  Instantiated on first use within a request.
+_encoder: TextEncoderInstance | None = None
+
+
+def _get_encoder() -> TextEncoderInstance:
+    global _encoder
+    if _encoder is None:
+        _encoder = TextEncoder.new()
+    return _encoder
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +140,7 @@ async def get_access_token(service_account_json: str) -> str:
     signature: ArrayBuffer = await crypto.subtle.sign(
         "RSASSA-PKCS1-v1_5",
         _imported_key,
-        _encoder.encode(signing_input),
+        _get_encoder().encode(signing_input),
     )
 
     # ``signature`` is a JS ArrayBuffer — convert directly to Python bytes.
