@@ -17,28 +17,9 @@ resource "random_password" "feed_id_secret" {
   special = false
 }
 
-resource "random_password" "dlp_bearer_token" {
-  length  = 48
-  special = false
-}
-
 # ---------------------------------------------------------------------------
-# GCP Secret Manager: bearer token + Drive credentials for the dlp service
+# GCP Secret Manager: Drive credentials for the dlp service
 # ---------------------------------------------------------------------------
-
-resource "google_secret_manager_secret" "dlp_bearer_token" {
-  project   = var.gcp_project_id
-  secret_id = "${var.dlp_service_name}-bearer-token"
-
-  replication {
-    auto {}
-  }
-}
-
-resource "google_secret_manager_secret_version" "dlp_bearer_token" {
-  secret      = google_secret_manager_secret.dlp_bearer_token.id
-  secret_data = random_password.dlp_bearer_token.result
-}
 
 resource "google_service_account" "drive" {
   count = var.google_service_account_json == null ? 1 : 0
@@ -95,8 +76,10 @@ module "dlp" {
 
   allow_unauthenticated = var.dlp_allow_unauthenticated
 
-  bearer_token_secret_id      = google_secret_manager_secret.dlp_bearer_token.secret_id
-  bearer_token_secret_version = google_secret_manager_secret_version.dlp_bearer_token.version
+  # The dlp-worker (running on Cloudflare) authenticates to Cloud Run by
+  # minting Google ID tokens using this same service account JSON, so the
+  # Drive SA needs roles/run.invoker on the dlp service.
+  invokers = ["serviceAccount:${local.drive_service_account_email}"]
 
   credentials_secret_id      = google_secret_manager_secret.google_credentials.secret_id
   credentials_secret_version = google_secret_manager_secret_version.google_credentials.version

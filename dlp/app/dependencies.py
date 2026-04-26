@@ -3,8 +3,6 @@
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import Depends, HTTPException, Request, status
-
 from app.config import Settings, settings
 from app.gdrive import GDrive
 from app.storage import LocalStorage, Storage
@@ -37,33 +35,3 @@ def get_storage() -> Storage:
         credentials_path=Path(s.credentials_path),
         path_prefix=s.drive_folder,
     )
-
-
-async def verify_bearer_token(
-    request: Request,
-    s: Settings = Depends(get_settings),
-) -> None:
-    """Check the Authorization header when a bearer token is configured.
-
-    If ``BEARER_TOKEN`` is not set, all requests are allowed through.
-    When it *is* set, every request must include a valid
-    ``Authorization: Bearer <token>`` header.
-    """
-    if not s.bearer_token:
-        return
-
-    auth_header = request.headers.get("Authorization")
-    if auth_header is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    scheme, _, token = auth_header.partition(" ")
-    if scheme.lower() != "bearer" or token != s.bearer_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid bearer token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )

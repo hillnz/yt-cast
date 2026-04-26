@@ -79,8 +79,7 @@ module "dlp" {
   drive_folder    = "dlp-archive-prod"
   allowed_origins = ["https://app.example.com"]
 
-  bearer_token_secret_id = google_secret_manager_secret.bearer.secret_id
-  credentials_secret_id  = google_secret_manager_secret.creds.secret_id
+  credentials_secret_id = google_secret_manager_secret.creds.secret_id
 
   invokers = ["serviceAccount:worker@my-gcp-project.iam.gserviceaccount.com"]
 }
@@ -130,19 +129,16 @@ serialised to the corresponding upper-case environment variable that
 | `storage_backend` | `string` | `"gdrive"` | `STORAGE_BACKEND` |
 | `local_storage_path` | `string` | `"./archive"` | `LOCAL_STORAGE_PATH` |
 | `redoc_enabled` | `bool` | `false` | `REDOC_ENABLED` |
-| `bearer_token` | `string` (sensitive) | `null` | `BEARER_TOKEN` (plain env var; ignored if `bearer_token_secret_id` is set) |
 | `extra_env` | `map(string)` | `{}` | Arbitrary additional env vars |
 
 ### Secret Manager wiring
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `bearer_token_secret_id` | `string` | `null` | Secret ID (short name in `project_id`) holding the bearer token. When set, mounted as the `BEARER_TOKEN` env var via `value_source.secret_key_ref`. |
-| `bearer_token_secret_version` | `string` | `"latest"` | Version of the bearer token secret. |
 | `credentials_secret_id` | `string` | `null` | Secret ID holding the Google service account credentials JSON. When set, mounted as a file at `credentials_path` and `GOOGLE_APPLICATION_CREDENTIALS` is set accordingly. |
 | `credentials_secret_version` | `string` | `"latest"` | Version of the credentials secret. |
 
-When either secret input is provided, the module also grants
+When the secret input is provided, the module also grants
 `roles/secretmanager.secretAccessor` on that secret to the service's runtime
 service account.
 

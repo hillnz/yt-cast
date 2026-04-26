@@ -21,14 +21,6 @@ locals {
     REDOC_ENABLED      = var.redoc_enabled ? "true" : "false"
   }
 
-  # Plain (non-secret) bearer token: only set when provided as a literal and
-  # no Secret Manager secret was configured.
-  plain_bearer_env = (
-    var.bearer_token != null && var.bearer_token_secret_id == null
-    ? { BEARER_TOKEN = var.bearer_token }
-    : {}
-  )
-
   # When a credentials secret is mounted, point the Google SDK at it.
   google_creds_env = (
     var.credentials_secret_id != null
@@ -38,7 +30,6 @@ locals {
 
   plain_env = merge(
     local.base_env,
-    local.plain_bearer_env,
     local.google_creds_env,
     var.extra_env,
   )
@@ -106,19 +97,6 @@ resource "google_cloud_run_v2_service" "this" {
         }
       }
 
-      dynamic "env" {
-        for_each = var.bearer_token_secret_id == null ? [] : [1]
-        content {
-          name = "BEARER_TOKEN"
-          value_source {
-            secret_key_ref {
-              secret  = var.bearer_token_secret_id
-              version = var.bearer_token_secret_version
-            }
-          }
-        }
-      }
-
       dynamic "volume_mounts" {
         for_each = var.credentials_secret_id == null ? [] : [1]
         content {
@@ -153,15 +131,6 @@ resource "google_cloud_run_v2_service_iam_member" "invokers" {
   name     = google_cloud_run_v2_service.this.name
   role     = "roles/run.invoker"
   member   = each.value == "allUsers" ? "allUsers" : each.value
-}
-
-resource "google_secret_manager_secret_iam_member" "bearer_token_accessor" {
-  count = var.bearer_token_secret_id == null ? 0 : 1
-
-  project   = var.project_id
-  secret_id = var.bearer_token_secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.service_account_email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "credentials_accessor" {

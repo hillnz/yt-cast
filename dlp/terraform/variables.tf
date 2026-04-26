@@ -190,25 +190,6 @@ variable "redoc_enabled" {
   default     = false
 }
 
-variable "bearer_token" {
-  description = "Optional bearer token required on all routes (BEARER_TOKEN). When set, sourced from a Secret Manager secret if bearer_token_secret_id is provided; otherwise injected as a plain env var."
-  type        = string
-  default     = null
-  sensitive   = true
-}
-
-variable "bearer_token_secret_id" {
-  description = "Optional Secret Manager secret ID (short name, in the same project) holding the bearer token. When set, the secret is mounted as the BEARER_TOKEN env var and bearer_token is ignored."
-  type        = string
-  default     = null
-}
-
-variable "bearer_token_secret_version" {
-  description = "Version of the bearer token secret to mount."
-  type        = string
-  default     = "latest"
-}
-
 variable "credentials_secret_id" {
   description = "Optional Secret Manager secret ID (short name, in the same project) holding the Google service account credentials JSON. When set, it is mounted as a file at credentials_path and GOOGLE_APPLICATION_CREDENTIALS is set accordingly."
   type        = string

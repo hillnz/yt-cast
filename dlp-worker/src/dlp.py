@@ -8,6 +8,7 @@ import httpx
 
 from feed.channel import ChannelData
 from feed.item import VideoData
+from google_auth import get_id_token
 
 
 class DlpError(Exception):
@@ -23,7 +24,7 @@ class DlpConfig:
     """Configuration for the DLP client, sourced from worker env vars."""
 
     base_url: str
-    bearer_token: str | None = None
+    service_account_json: str
     timeout: float = 600.0
 
     @classmethod
@@ -33,9 +34,12 @@ class DlpConfig:
         if not base_url:
             raise DlpError("DLP_URL env var is not configured")
 
-        token_raw = getattr(env, "DLP_BEARER_TOKEN", None)
-        token = str(token_raw) if token_raw else None
-        return cls(base_url=base_url, bearer_token=token or None)
+        sa_raw = getattr(env, "GOOGLE_SERVICE_ACCOUNT", None)
+        sa_json = str(sa_raw) if sa_raw else ""
+        if not sa_json:
+            raise DlpError("GOOGLE_SERVICE_ACCOUNT env var is not configured")
+
+        return cls(base_url=base_url, service_account_json=sa_json)
 
 
 class DlpClient:
@@ -43,13 +47,9 @@ class DlpClient:
 
     def __init__(self, config: DlpConfig) -> None:
         self._config = config
-        headers: dict[str, str] = {"Accept": "application/json"}
-        if config.bearer_token:
-            headers["Authorization"] = f"Bearer {config.bearer_token}"
-
         self._client = httpx.AsyncClient(
             base_url=config.base_url,
-            headers=headers,
+            headers={"Accept": "application/json"},
             timeout=config.timeout,
         )
 
@@ -74,7 +74,11 @@ class DlpClient:
 
     async def download_video(self, video_id: str) -> None:
         """POST ``/download`` to make DLP archive *video_id* to its store."""
-        resp = await self._client.post("/download", json={"video_id": video_id})
+        resp = await self._client.post(
+            "/download",
+            json={"video_id": video_id},
+            headers=await self._auth_headers(),
+        )
         if resp.status_code == httpx.codes.NOT_FOUND:
             raise DlpNotFoundError(f"DLP video not found: {video_id}")
         if resp.status_code >= 400:
@@ -84,8 +88,14 @@ class DlpClient:
 
     # -- internals ---------------------------------------------------------
 
+    async def _auth_headers(self) -> dict[str, str]:
+        token = await get_id_token(
+            self._config.service_account_json, self._config.base_url
+        )
+        return {"Authorization": f"Bearer {token}"}
+
     async def _get_json(self, path: str) -> dict[str, object]:
-        resp = await self._client.get(path)
+        resp = await self._client.get(path, headers=await self._auth_headers())
 
         if resp.status_code == httpx.codes.NOT_FOUND:
             raise DlpNotFoundError(f"DLP resource not found: {path}")

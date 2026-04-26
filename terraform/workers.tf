@@ -80,9 +80,8 @@ resource "null_resource" "dlp_worker_deploy" {
     src  = local.dlp_worker_src_hash
     vars = sha1(jsonencode(local.dlp_worker_runtime_vars))
     secrets = sha1(jsonencode({
-      bearer = random_password.dlp_bearer_token.result
-      feed   = random_password.feed_id_secret.result
-      gsa    = local.google_service_account_json
+      feed = random_password.feed_id_secret.result
+      gsa  = local.google_service_account_json
     }))
   }
 
@@ -96,7 +95,6 @@ resource "null_resource" "dlp_worker_deploy" {
         --var "DRIVE_ROOT_ID:$DRIVE_ROOT_ID" \
         --var "DLP_URL:$DLP_URL" \
         --var "R2_PUBLIC_URL:$R2_PUBLIC_URL"
-      printf '%s' "$DLP_BEARER_TOKEN"       | uv run pywrangler secret put DLP_BEARER_TOKEN
       printf '%s' "$FEED_ID_SECRET"         | uv run pywrangler secret put FEED_ID_SECRET
       printf '%s' "$GOOGLE_SERVICE_ACCOUNT" | uv run pywrangler secret put GOOGLE_SERVICE_ACCOUNT
     EOT
@@ -105,7 +103,6 @@ resource "null_resource" "dlp_worker_deploy" {
       DRIVE_ROOT_ID          = var.drive_root_id
       DLP_URL                = module.dlp.uri
       R2_PUBLIC_URL          = local.r2_public_url
-      DLP_BEARER_TOKEN       = random_password.dlp_bearer_token.result
       FEED_ID_SECRET         = random_password.feed_id_secret.result
       GOOGLE_SERVICE_ACCOUNT = local.google_service_account_json
     }

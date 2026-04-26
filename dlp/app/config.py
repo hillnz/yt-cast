@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     storage_backend: str = "gdrive"
     local_storage_path: str = "./archive"
     redoc_enabled: bool = False
-    bearer_token: str | None = None
 
 
 settings = Settings()

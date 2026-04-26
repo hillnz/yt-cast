@@ -23,9 +23,6 @@ COPY --from=builder /app/app /app/app
 # Google Drive service account credentials are mounted here.
 RUN mkdir -p /config
 ENV GOOGLE_APPLICATION_CREDENTIALS="/config/credentials.json"
-# Optional: set BEARER_TOKEN to require Authorization: Bearer <token> on all routes.
-# When unset, all requests are allowed without authentication.
-#ENV BEARER_TOKEN=""
 VOLUME ["/config"]
 
 ENV PATH="/app/.venv/bin:$PATH"

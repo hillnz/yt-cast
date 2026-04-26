@@ -1,15 +1,16 @@
 """Google service account authentication via Web Crypto FFI.
 
-Mints short-lived Google access tokens using a service account's RSA
-private key.  All cryptographic operations use the Web Crypto API
-(``crypto.subtle``) accessed through Pyodide's JS FFI — no C-extension
-packages required.
+Mints short-lived Google access tokens (Drive scope) and identity
+tokens (for invoking IAM-protected Cloud Run services) using a service
+account's RSA private key.  All cryptographic operations use the Web
+Crypto API (``crypto.subtle``) accessed through Pyodide's JS FFI — no
+C-extension packages required.
 
 Token caching
 -------------
-Access tokens are valid for one hour.  We cache the token and the
-imported ``CryptoKey`` at module level so they survive across requests
-within the same isolate, avoiding redundant JWT minting.
+Tokens are valid for one hour.  We cache them and the imported
+``CryptoKey`` at module level so they survive across requests within
+the same isolate, avoiding redundant JWT minting.
 """
 
 from __future__ import annotations
@@ -39,6 +40,9 @@ _cached_token: str | None = None
 _token_expiry: int = 0
 _imported_key: CryptoKey | None = None
 _key_email: str | None = None
+
+# ID tokens are audience-specific, so cache per-audience.
+_id_token_cache: dict[str, tuple[str, int]] = {}
 
 # Lazily constructed: the dedicated snapshot taken at deploy time can't
 # serialise JS proxies, so we can't hold a TextEncoder instance at module
@@ -94,6 +98,29 @@ async def _import_private_key(pem: str) -> CryptoKey:
 # ---------------------------------------------------------------------------
 
 
+async def _ensure_key(email: str, private_key_pem: str) -> CryptoKey:
+    """Return the cached imported private key, importing it if needed."""
+    global _imported_key, _key_email
+    if _imported_key is None or _key_email != email:
+        _imported_key = await _import_private_key(private_key_pem)
+        _key_email = email
+    return _imported_key
+
+
+async def _sign_jwt(key: CryptoKey, claims: dict[str, str | int]) -> str:
+    """Sign *claims* with *key* using RS256 and return the compact JWT."""
+    header: dict[str, str] = {"alg": "RS256", "typ": "JWT"}
+    signing_input = (
+        f"{_b64url_encode(json.dumps(header))}.{_b64url_encode(json.dumps(claims))}"
+    )
+    signature: ArrayBuffer = await crypto.subtle.sign(
+        "RSASSA-PKCS1-v1_5",
+        key,
+        _get_encoder().encode(signing_input),
+    )
+    return f"{signing_input}.{_b64url_encode(signature.to_bytes())}"
+
+
 async def get_access_token(service_account_json: str) -> str:
     """Return a cached or freshly minted Google OAuth2 access token.
 
@@ -106,48 +133,23 @@ async def get_access_token(service_account_json: str) -> str:
     The token is cached at module level.  If the cached token is still
     valid (with a 60-second safety margin) it is returned immediately.
     """
-    global _cached_token, _token_expiry, _imported_key, _key_email
+    global _cached_token, _token_expiry
 
     now = int(time.time())
     if _cached_token and now < _token_expiry - 60:
         return _cached_token
 
     sa = cast(dict[str, str], json.loads(service_account_json))
-    email: str = sa["client_email"]
-    private_key_pem: str = sa["private_key"]
+    key = await _ensure_key(sa["client_email"], sa["private_key"])
 
-    # Re-import the CryptoKey only when the service account changes (or on
-    # first call).
-    if _imported_key is None or _key_email != email:
-        _imported_key = await _import_private_key(private_key_pem)
-        _key_email = email
-
-    # -- Build JWT --------------------------------------------------------
-    header: dict[str, str] = {"alg": "RS256", "typ": "JWT"}
-    claims: dict[str, str | int] = {
-        "iss": email,
+    jwt_token = await _sign_jwt(key, {
+        "iss": sa["client_email"],
         "scope": "https://www.googleapis.com/auth/drive",
         "aud": "https://oauth2.googleapis.com/token",
         "iat": now,
         "exp": now + 3600,
-    }
+    })
 
-    signing_input = (
-        f"{_b64url_encode(json.dumps(header))}.{_b64url_encode(json.dumps(claims))}"
-    )
-
-    # -- Sign with RS256 via Web Crypto -----------------------------------
-    signature: ArrayBuffer = await crypto.subtle.sign(
-        "RSASSA-PKCS1-v1_5",
-        _imported_key,
-        _get_encoder().encode(signing_input),
-    )
-
-    # ``signature`` is a JS ArrayBuffer — convert directly to Python bytes.
-    sig_bytes = signature.to_bytes()
-    jwt_token = f"{signing_input}.{_b64url_encode(sig_bytes)}"
-
-    # -- Exchange JWT for an access token ---------------------------------
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             "https://oauth2.googleapis.com/token",
@@ -171,3 +173,48 @@ async def get_access_token(service_account_json: str) -> str:
 
     _token_expiry = now + expires_in
     return _cached_token
+
+
+async def get_id_token(service_account_json: str, audience: str) -> str:
+    """Return a cached or freshly minted Google ID token for *audience*.
+
+    Used to invoke IAM-protected Cloud Run services. The audience must
+    match the service's URL (no trailing slash). The signed JWT carries
+    ``target_audience`` so Google's token endpoint returns an ID token
+    rather than an access token.
+    """
+    now = int(time.time())
+    cached = _id_token_cache.get(audience)
+    if cached and now < cached[1] - 60:
+        return cached[0]
+
+    sa = cast(dict[str, str], json.loads(service_account_json))
+    key = await _ensure_key(sa["client_email"], sa["private_key"])
+
+    jwt_token = await _sign_jwt(key, {
+        "iss": sa["client_email"],
+        "target_audience": audience,
+        "aud": "https://oauth2.googleapis.com/token",
+        "iat": now,
+        "exp": now + 3600,
+    })
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                "assertion": jwt_token,
+            },
+        )
+
+    if resp.status_code != httpx.codes.OK:
+        raise RuntimeError(
+            f"ID token exchange failed ({resp.status_code}): {resp.text}"
+        )
+
+    id_token = str(resp.json()["id_token"])
+    # Google ID tokens are valid for 1h. We don't parse the JWT exp here —
+    # cache for 55 min and let the safety margin handle clock skew.
+    _id_token_cache[audience] = (id_token, now + 3300)
+    return id_token

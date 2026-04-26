@@ -3,13 +3,12 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.dependencies import verify_bearer_token
 from app.routers import channel, download, health, video
 from app.storage import StorageError
 from app.ytdl import ItemNotFoundError, YtDlError
@@ -28,7 +27,6 @@ app = FastAPI(
     description="Archive API for the DLP project.",
     version="0.1.0",
     lifespan=lifespan,
-    dependencies=[Depends(verify_bearer_token)],
     redoc_url="/redoc" if settings.redoc_enabled else None,
 )
 
