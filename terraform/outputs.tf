@@ -8,6 +8,11 @@ output "dlp_service_account_email" {
   value       = module.dlp.service_account_email
 }
 
+output "drive_service_account_email" {
+  description = "Email of the service account that needs Editor access to the Drive folder identified by drive_root_id. Share that folder with this email."
+  value       = local.drive_service_account_email
+}
+
 output "r2_bucket_name" {
   description = "Name of the shared R2 bucket."
   value       = cloudflare_r2_bucket.yt_cast.name

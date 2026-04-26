@@ -83,7 +83,7 @@ resource "null_resource" "dlp_worker_deploy" {
     secrets = sha1(jsonencode({
       bearer = random_password.dlp_bearer_token.result
       feed   = random_password.feed_id_secret.result
-      gsa    = var.google_service_account_json
+      gsa    = local.google_service_account_json
     }))
   }
 
@@ -109,7 +109,7 @@ resource "null_resource" "dlp_worker_deploy" {
       R2_PUBLIC_URL          = local.r2_public_url
       DLP_BEARER_TOKEN       = random_password.dlp_bearer_token.result
       FEED_ID_SECRET         = random_password.feed_id_secret.result
-      GOOGLE_SERVICE_ACCOUNT = var.google_service_account_json
+      GOOGLE_SERVICE_ACCOUNT = local.google_service_account_json
     }
   }
 

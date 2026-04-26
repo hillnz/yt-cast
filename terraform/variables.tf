@@ -77,9 +77,10 @@ variable "drive_root_id" {
 }
 
 variable "google_service_account_json" {
-  description = "Full JSON content of a Google service account key with read access to the Drive folder. Pushed to the dlp-worker as the GOOGLE_SERVICE_ACCOUNT secret AND mounted as the credentials file for the dlp Cloud Run service."
+  description = "Full JSON content of a Google service account key with access to the Drive folder. If null (default), Terraform creates a service account and key in `gcp_project_id` — share the Drive folder with the resulting `drive_service_account_email` output. Pushed to the dlp-worker as the GOOGLE_SERVICE_ACCOUNT secret AND mounted as the credentials file for the dlp Cloud Run service."
   type        = string
   sensitive   = true
+  default     = null
 }
 
 # ---------------------------------------------------------------------------

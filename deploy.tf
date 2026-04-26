@@ -96,6 +96,7 @@ variable "drive_root_id" {
 variable "google_service_account_json" {
   type      = string
   sensitive = true
+  default   = null
 }
 
 variable "repo_root" {
@@ -138,6 +139,11 @@ output "dlp_url" {
 output "dlp_service_account_email" {
   description = "Runtime service account email for the dlp Cloud Run service."
   value       = module.main.dlp_service_account_email
+}
+
+output "drive_service_account_email" {
+  description = "Email of the service account that needs Editor access to the Drive folder identified by drive_root_id. Share that folder with this email."
+  value       = module.main.drive_service_account_email
 }
 
 output "r2_bucket_name" {

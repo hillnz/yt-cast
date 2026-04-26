@@ -40,6 +40,33 @@ resource "google_secret_manager_secret_version" "dlp_bearer_token" {
   secret_data = random_password.dlp_bearer_token.result
 }
 
+resource "google_service_account" "drive" {
+  count = var.google_service_account_json == null ? 1 : 0
+
+  project      = var.gcp_project_id
+  account_id   = "${var.dlp_service_name}-drive"
+  display_name = "${var.dlp_service_name} Drive access"
+}
+
+resource "google_service_account_key" "drive" {
+  count = var.google_service_account_json == null ? 1 : 0
+
+  service_account_id = google_service_account.drive[0].name
+}
+
+locals {
+  google_service_account_json = (
+    var.google_service_account_json != null
+    ? var.google_service_account_json
+    : base64decode(google_service_account_key.drive[0].private_key)
+  )
+  drive_service_account_email = (
+    var.google_service_account_json != null
+    ? jsondecode(var.google_service_account_json).client_email
+    : google_service_account.drive[0].email
+  )
+}
+
 resource "google_secret_manager_secret" "google_credentials" {
   project   = var.gcp_project_id
   secret_id = "${var.dlp_service_name}-gdrive-credentials"
@@ -51,7 +78,7 @@ resource "google_secret_manager_secret" "google_credentials" {
 
 resource "google_secret_manager_secret_version" "google_credentials" {
   secret      = google_secret_manager_secret.google_credentials.id
-  secret_data = var.google_service_account_json
+  secret_data = local.google_service_account_json
 }
 
 # ---------------------------------------------------------------------------
