@@ -51,12 +51,6 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
-variable "bucket_name" {
-  description = "Name of the R2 bucket shared by both workers. Must match the bucket_name in each worker's wrangler.jsonc."
-  type        = string
-  default     = "yt-cast"
-}
-
 variable "bucket_location" {
   description = "R2 bucket location hint (only honoured on initial creation)."
   type        = string
@@ -65,12 +59,6 @@ variable "bucket_location" {
     condition     = contains(["apac", "eeur", "enam", "weur", "wnam", "oc"], var.bucket_location)
     error_message = "bucket_location must be one of apac, eeur, enam, weur, wnam, oc."
   }
-}
-
-variable "queue_name" {
-  description = "Name of the Cloudflare Queue. Must match the producer/consumer queue name in each worker's wrangler.jsonc."
-  type        = string
-  default     = "feed-worker-queue"
 }
 
 variable "r2_public_url" {
