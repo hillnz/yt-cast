@@ -23,6 +23,7 @@ from download import (
     download_video,
     existing_segment_hash,
     head_video,
+    list_cached_video_ids,
 )
 from feed.channel import ChannelData
 from feed.item import VideoData
@@ -128,63 +129,22 @@ def _public_audio_url(env: JsProxy, feed_id: str, video_id: str) -> str:
     return f"{base}/{video_path(feed_id, video_id)}"
 
 
-async def _ensure_videos_cached(
-    env: JsProxy,
-    *,
-    dlp: DlpClient,
-    feed_id: str,
-    videos: list[VideoData],
-) -> None:
-    """Download videos missing from R2 or whose SponsorBlock segments have
-    changed. Failures are logged, not raised."""
-    async with httpx.AsyncClient(timeout=30.0) as sb_client:
-        for video in videos:
-            video_id = video["id"]
-            head = await head_video(env, feed_id, video_id)
-
-            try:
-                segments = await fetch_segment_timestamps(sb_client, video_id)
-                new_hash = hash_segment_timestamps(segments)
-            except SponsorBlockError as exc:
-                if head is not None:
-                    console.warn(
-                        f"SponsorBlock unavailable for {video_id}, "
-                        + f"keeping cached file: {exc}"
-                    )
-                    continue
-                console.warn(
-                    f"SponsorBlock unavailable for {video_id}, "
-                    + f"downloading without hash: {exc}"
-                )
-                # Empty hash → next run with a working SB sees no stored hash
-                # and will refresh the file.
-                new_hash = ""
-
-            old_hash = existing_segment_hash(head)
-            if head is not None and old_hash == new_hash:
-                continue
-
-            try:
-                await download_video(
-                    env,
-                    dlp=dlp,
-                    feed_id=feed_id,
-                    video_id=video_id,
-                    segment_hash=new_hash,
-                )
-            except (DlpError, VideoDownloadError) as exc:
-                console.error(f"Skipping {video_id}: {exc}")
-
-
 async def _rebuild_feed(
     env: JsProxy,
     *,
     feed_id: str,
     channel_id: str,
 ) -> None:
-    """Fetch channel + videos, refresh audio cache, write feed.xml."""
+    """Fetch channel + videos, refresh audio cache, write feed.xml.
+
+    Publishes feed.xml repeatedly through the run: once up front (so a
+    brand-new feed is reachable before any downloads complete, and so a
+    crash mid-run leaves a partial feed instead of a stale one), then
+    again after each successful video download. Cached video IDs are
+    discovered via R2 ``list`` so each partial feed can include audio
+    that's already in the bucket from prior runs.
+    """
     config = DlpConfig.from_env(env)
-    now = datetime.now(timezone.utc)
 
     async with DlpClient(config) as dlp:
         try:
@@ -203,18 +163,72 @@ async def _rebuild_feed(
             dlp, video_ids, _DEFAULT_VIDEO_FETCH_CONCURRENCY
         )
 
-        await _ensure_videos_cached(env, dlp=dlp, feed_id=feed_id, videos=videos)
+        cached_video_ids = await list_cached_video_ids(env, feed_id)
 
-    def audio_url_for(video: VideoData) -> str:
-        return _public_audio_url(env, feed_id, video["id"])
+        def audio_url_for(video: VideoData) -> str:
+            return _public_audio_url(env, feed_id, video["id"])
 
-    body = build_feed(
-        channel=channel,
-        videos=videos,
-        audio_url_for=audio_url_for,
-        last_built=now,
-    )
-    await write_feed(env, feed_id, body, channel_id=channel_id, last_built=now)
+        async def publish() -> None:
+            now = datetime.now(timezone.utc)
+            included = [v for v in videos if v["id"] in cached_video_ids]
+            body = build_feed(
+                channel=channel,
+                videos=included,
+                audio_url_for=audio_url_for,
+                last_built=now,
+            )
+            await write_feed(
+                env, feed_id, body, channel_id=channel_id, last_built=now
+            )
+
+        await publish()
+        console.log(
+            f"Initial feed published: feed_id={feed_id}, "
+            + f"cached={len(cached_video_ids)}"
+        )
+
+        async with httpx.AsyncClient(timeout=30.0) as sb_client:
+            for video in videos:
+                video_id = video["id"]
+                head = await head_video(env, feed_id, video_id)
+
+                try:
+                    segments = await fetch_segment_timestamps(sb_client, video_id)
+                    new_hash = hash_segment_timestamps(segments)
+                except SponsorBlockError as exc:
+                    if head is not None:
+                        console.warn(
+                            f"SponsorBlock unavailable for {video_id}, "
+                            + f"keeping cached file: {exc}"
+                        )
+                        continue
+                    console.warn(
+                        f"SponsorBlock unavailable for {video_id}, "
+                        + f"downloading without hash: {exc}"
+                    )
+                    # Empty hash → next run with a working SB sees no stored
+                    # hash and will refresh the file.
+                    new_hash = ""
+
+                old_hash = existing_segment_hash(head)
+                if head is not None and old_hash == new_hash:
+                    continue
+
+                try:
+                    await download_video(
+                        env,
+                        dlp=dlp,
+                        feed_id=feed_id,
+                        video_id=video_id,
+                        segment_hash=new_hash,
+                    )
+                except (DlpError, VideoDownloadError) as exc:
+                    console.error(f"Skipping {video_id}: {exc}")
+                    continue
+
+                cached_video_ids.add(video_id)
+                await publish()
+
     console.log(f"Feed published: feed_id={feed_id}")
 
 

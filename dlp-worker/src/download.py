@@ -37,6 +37,40 @@ async def head_video(env: JsProxy, feed_id: str, video_id: str) -> JsProxy | Non
     return head if head else None
 
 
+async def list_cached_video_ids(env: JsProxy, feed_id: str) -> set[str]:
+    """Return the set of video IDs already present in R2 for *feed_id*.
+
+    Reads the ``{feed_id}/`` listing and strips out keys that aren't
+    per-video objects (notably ``feed.xml``). Used so a partial feed can
+    include audio that's already cached even before SponsorBlock /
+    metadata checks have been run for the current message.
+    """
+    prefix = f"{feed_id}/"
+    cached: set[str] = set()
+    cursor: str | None = None
+    while True:
+        opts: dict[str, object] = {"prefix": prefix, "limit": 1000}
+        if cursor is not None:
+            opts["cursor"] = cursor
+        result = await env.STORAGE.list(to_js(opts))
+        objects = getattr(result, "objects", None) or []
+        for obj in objects:
+            key = str(obj.key)
+            if not key.startswith(prefix):
+                continue
+            suffix = key[len(prefix):]
+            if not suffix or "/" in suffix or suffix == "feed.xml":
+                continue
+            cached.add(suffix)
+        if not bool(getattr(result, "truncated", False)):
+            break
+        next_cursor = getattr(result, "cursor", None)
+        cursor = str(next_cursor) if next_cursor else None
+        if cursor is None:
+            break
+    return cached
+
+
 def existing_segment_hash(head: JsProxy | None) -> str | None:
     """Return the segment hash stored on an R2 head object, if any."""
     if head is None:
