@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.12-alpine AS builder
 
 WORKDIR /app
 
@@ -9,13 +9,11 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY app/ ./app/
 
 
-FROM python:3.12-slim-trixie AS runtime
+FROM python:3.12-alpine AS runtime
 
-# Install ffmpeg (required by yt-dlp for audio extraction / post-processing)
-# and quickjs (required by yt-dlp-ejs for full YouTube support)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg quickjs && \
-    rm -rf /var/lib/apt/lists/*
+# ffmpeg (required by yt-dlp for audio extraction / post-processing)
+# quickjs (required by yt-dlp-ejs for full YouTube support)
+RUN apk add --no-cache ffmpeg quickjs
 
 WORKDIR /app
 
