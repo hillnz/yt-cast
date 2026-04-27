@@ -89,6 +89,18 @@ variable "google_service_account_json" {
   default     = null
 }
 
+variable "alert_email_from" {
+  description = "From address used by the dlp-worker when sending operator alerts via Cloudflare Email Routing. Must be on a domain in this Cloudflare account that has Email Routing enabled. Empty disables alerting."
+  type        = string
+  default     = ""
+}
+
+variable "alert_email_to" {
+  description = "Operator destination address for dlp-worker alerts (e.g. cookie-refresh notifications). Must be added and verified as an Email Routing destination in the Cloudflare dashboard before the binding will deliver mail. Empty disables alerting."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------

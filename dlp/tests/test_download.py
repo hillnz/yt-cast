@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from app.dependencies import get_storage, get_ytdl
 from app.main import app
 from app.storage import Storage, StorageError
-from app.ytdl import ItemNotFoundError, YtDl, YtDlError
+from app.ytdl import ItemNotFoundError, YtDl, YtDlAuthError, YtDlError
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -135,6 +135,23 @@ async def test_ytdl_error_returns_502(
     mock_ytdl.download_audio.side_effect = YtDlError("download failed")
     status, _ = await post(valid_payload)
     assert status == 502
+
+
+@pytest.mark.asyncio
+async def test_ytdl_auth_error_returns_502_with_code(
+    valid_payload: dict, override_deps, mock_ytdl: AsyncMock
+) -> None:
+    """YtDlAuthError should return 502 with a youtube_auth_required code so
+    the dlp-worker can react specifically (fire an alert)."""
+    import json
+
+    mock_ytdl.download_audio.side_effect = YtDlAuthError(
+        "Sign in to confirm you're not a bot"
+    )
+    status, body = await post(valid_payload)
+    assert status == 502
+    decoded = json.loads(body)
+    assert decoded["code"] == "youtube_auth_required"
 
 
 @pytest.mark.asyncio

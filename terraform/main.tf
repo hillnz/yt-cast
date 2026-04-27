@@ -81,6 +81,28 @@ resource "google_secret_manager_secret_version" "google_credentials" {
 }
 
 # ---------------------------------------------------------------------------
+# GCP Secret Manager: YouTube cookies for the dlp service
+#
+# Created empty here so the secret exists for IAM and the Cloud Run mount.
+# Versions are pushed manually via scripts/refresh-yt-cookies (it runs a
+# fresh Firefox profile, you sign in, and the script extracts cookies and
+# `gcloud secrets versions add`s them). The Cloud Run mount uses
+# version = "latest", so a refresh takes effect on the next cold start.
+#
+# When no version exists yet (first apply), Cloud Run will fail to start;
+# push a version with the script before the first invocation.
+# ---------------------------------------------------------------------------
+
+resource "google_secret_manager_secret" "yt_cookies" {
+  project   = var.gcp_project_id
+  secret_id = "${var.dlp_service_name}-yt-cookies"
+
+  replication {
+    auto {}
+  }
+}
+
+# ---------------------------------------------------------------------------
 # dlp Cloud Run service (delegated to the existing dlp/terraform module)
 # ---------------------------------------------------------------------------
 
@@ -101,6 +123,8 @@ module "dlp" {
 
   credentials_secret_id      = google_secret_manager_secret.google_credentials.secret_id
   credentials_secret_version = google_secret_manager_secret_version.google_credentials.version
+
+  yt_cookies_secret_id = google_secret_manager_secret.yt_cookies.secret_id
 
   storage_backend = "gdrive"
 

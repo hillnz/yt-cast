@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.routers import channel, download, health, video
 from app.storage import StorageError
-from app.ytdl import ItemNotFoundError, YtDlError
+from app.ytdl import ItemNotFoundError, YtDlAuthError, YtDlError
 
 
 @asynccontextmanager
@@ -45,6 +45,25 @@ async def item_not_found_handler(
 ) -> JSONResponse:
     """Return 404 when a YouTube item is not found."""
     return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+
+@app.exception_handler(YtDlAuthError)
+async def ytdl_auth_error_handler(
+    request: Request, exc: YtDlAuthError
+) -> JSONResponse:
+    """Return a discriminated 502 when YouTube demands authentication.
+
+    The ``code`` field lets the dlp-worker react specifically (e.g. fire
+    an email alert prompting a cookie refresh) without parsing free-form
+    detail strings.
+    """
+    return JSONResponse(
+        status_code=502,
+        content={
+            "detail": "YouTube authentication required",
+            "code": "youtube_auth_required",
+        },
+    )
 
 
 @app.exception_handler(YtDlError)

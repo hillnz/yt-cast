@@ -8,6 +8,9 @@ locals {
   credentials_mount_path = var.credentials_secret_id != null ? dirname(var.credentials_path) : null
   credentials_filename   = var.credentials_secret_id != null ? basename(var.credentials_path) : null
 
+  yt_cookies_mount_path = var.yt_cookies_secret_id != null ? dirname(var.yt_cookies_path) : null
+  yt_cookies_filename   = var.yt_cookies_secret_id != null ? basename(var.yt_cookies_path) : null
+
   # Base env vars derived from the dlp Settings model. Values are stringified
   # because Cloud Run env vars are strings; pydantic-settings will coerce.
   base_env = {
@@ -28,9 +31,16 @@ locals {
     : {}
   )
 
+  yt_cookies_env = (
+    var.yt_cookies_secret_id != null
+    ? { YT_COOKIES_PATH = var.yt_cookies_path }
+    : {}
+  )
+
   plain_env = merge(
     local.base_env,
     local.google_creds_env,
+    local.yt_cookies_env,
     var.extra_env,
   )
 
@@ -104,6 +114,14 @@ resource "google_cloud_run_v2_service" "this" {
           mount_path = local.credentials_mount_path
         }
       }
+
+      dynamic "volume_mounts" {
+        for_each = var.yt_cookies_secret_id == null ? [] : [1]
+        content {
+          name       = "yt-cookies"
+          mount_path = local.yt_cookies_mount_path
+        }
+      }
     }
 
     dynamic "volumes" {
@@ -115,6 +133,21 @@ resource "google_cloud_run_v2_service" "this" {
           items {
             version = var.credentials_secret_version
             path    = local.credentials_filename
+            mode    = 0400
+          }
+        }
+      }
+    }
+
+    dynamic "volumes" {
+      for_each = var.yt_cookies_secret_id == null ? [] : [1]
+      content {
+        name = "yt-cookies"
+        secret {
+          secret = var.yt_cookies_secret_id
+          items {
+            version = var.yt_cookies_secret_version
+            path    = local.yt_cookies_filename
             mode    = 0400
           }
         }
@@ -138,6 +171,15 @@ resource "google_secret_manager_secret_iam_member" "credentials_accessor" {
 
   project   = var.project_id
   secret_id = var.credentials_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.service_account_email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "yt_cookies_accessor" {
+  count = var.yt_cookies_secret_id == null ? 0 : 1
+
+  project   = var.project_id
+  secret_id = var.yt_cookies_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${local.service_account_email}"
 }

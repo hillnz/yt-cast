@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     storage_backend: str = "gdrive"
     local_storage_path: str = "./archive"
     redoc_enabled: bool = False
+    yt_cookies_path: str | None = None
 
 
 settings = Settings()

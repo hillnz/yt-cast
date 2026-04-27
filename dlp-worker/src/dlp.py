@@ -11,12 +11,36 @@ from feed.item import VideoData
 from google_auth import get_id_token
 
 
+def _error_code(resp: httpx.Response) -> str | None:
+    """Extract a discriminator code from a JSON error body, best-effort.
+
+    The DLP service returns ``{"detail": "...", "code": "..."}`` for
+    errors it wants the worker to react to specifically. Any non-JSON
+    body or missing ``code`` returns None — callers fall back to the
+    generic error path."""
+    try:
+        body = resp.json()
+    except (ValueError, TypeError):
+        return None
+    if isinstance(body, dict):
+        code = body.get("code")
+        if isinstance(code, str):
+            return code
+    return None
+
+
 class DlpError(Exception):
     """Base class for errors raised when talking to the DLP service."""
 
 
 class DlpNotFoundError(DlpError):
     """Raised when the DLP service returns 404 for a resource."""
+
+
+class DlpAuthRequiredError(DlpError):
+    """Raised when the DLP service signals that YouTube is gating
+    requests behind a sign-in (cookies need refreshing). The DLP API
+    returns this as a 502 with ``{"code": "youtube_auth_required"}``."""
 
 
 @dataclass(frozen=True)
@@ -82,6 +106,10 @@ class DlpClient:
         if resp.status_code == httpx.codes.NOT_FOUND:
             raise DlpNotFoundError(f"DLP video not found: {video_id}")
         if resp.status_code >= 400:
+            if _error_code(resp) == "youtube_auth_required":
+                raise DlpAuthRequiredError(
+                    f"DLP reports YouTube auth required for {video_id}"
+                )
             raise DlpError(
                 f"DLP download error ({resp.status_code}) for {video_id}: {resp.text}"
             )
@@ -101,6 +129,10 @@ class DlpClient:
             raise DlpNotFoundError(f"DLP resource not found: {path}")
 
         if resp.status_code >= 400:
+            if _error_code(resp) == "youtube_auth_required":
+                raise DlpAuthRequiredError(
+                    f"DLP reports YouTube auth required for {path}"
+                )
             raise DlpError(f"DLP error ({resp.status_code}) for {path}: {resp.text}")
 
         return resp.json()

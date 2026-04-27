@@ -6,7 +6,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yt_dlp
 
-from app.ytdl import Channel, ItemNotFoundError, Thumbnail, Video, YtDl, YtDlError
+from app.ytdl import (
+    Channel,
+    ItemNotFoundError,
+    Thumbnail,
+    Video,
+    YtDl,
+    YtDlAuthError,
+    YtDlError,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -611,3 +619,133 @@ class TestIsNotFound:
     def test_generic_error_not_matched(self) -> None:
         exc = yt_dlp.utils.DownloadError("Something went wrong")
         assert YtDl._is_not_found(exc) is False
+
+
+# ---------------------------------------------------------------------------
+# _is_auth_required helper tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsAuthRequired:
+    """Tests for the static _is_auth_required helper."""
+
+    def test_sign_in_to_confirm_detected(self) -> None:
+        exc = yt_dlp.utils.DownloadError(
+            "ERROR: [youtube] foo: Sign in to confirm you're not a bot."
+        )
+        assert YtDl._is_auth_required(exc) is True
+
+    def test_use_cookies_hint_detected(self) -> None:
+        exc = yt_dlp.utils.DownloadError("Use --cookies-from-browser or --cookies")
+        assert YtDl._is_auth_required(exc) is True
+
+    def test_unrelated_error_not_matched(self) -> None:
+        exc = yt_dlp.utils.DownloadError("HTTP Error 500: Server Error")
+        assert YtDl._is_auth_required(exc) is False
+
+    def test_not_found_not_matched(self) -> None:
+        exc = yt_dlp.utils.DownloadError("HTTP Error 404: Not Found")
+        assert YtDl._is_auth_required(exc) is False
+
+
+# ---------------------------------------------------------------------------
+# Auth-error propagation tests — auth errors must take precedence over the
+# not-found path so the worker can fire its alert.
+# ---------------------------------------------------------------------------
+
+
+class TestAuthErrorPropagation:
+    """Tests that auth-required errors surface as YtDlAuthError everywhere."""
+
+    @pytest.mark.asyncio
+    async def test_get_video_info_raises_auth_error(self, ytdl: YtDl) -> None:
+        with patch.object(
+            YtDl,
+            "_extract_info",
+            side_effect=yt_dlp.utils.DownloadError(
+                "Sign in to confirm you're not a bot"
+            ),
+        ):
+            with pytest.raises(YtDlAuthError):
+                await ytdl.get_video_info("abc123")
+
+    @pytest.mark.asyncio
+    async def test_get_channel_info_raises_auth_error(self, ytdl: YtDl) -> None:
+        """Auth gate hits on the very first URL probe — must NOT fall through
+        to the next pattern; we want a single alert, not silent retries."""
+        with patch.object(
+            YtDl,
+            "_extract_info",
+            side_effect=yt_dlp.utils.DownloadError(
+                "Sign in to confirm you're not a bot"
+            ),
+        ):
+            with pytest.raises(YtDlAuthError):
+                await ytdl.get_channel_info("Techmoan")
+
+    @pytest.mark.asyncio
+    async def test_download_audio_raises_auth_error(self, ytdl: YtDl) -> None:
+        mock_ydl = MagicMock()
+        mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
+        mock_ydl.__exit__ = MagicMock(return_value=False)
+        mock_ydl.download.side_effect = yt_dlp.utils.DownloadError(
+            "Sign in to confirm you're not a bot"
+        )
+
+        with patch("app.ytdl.yt_dlp.YoutubeDL", return_value=mock_ydl):
+            with pytest.raises(YtDlAuthError):
+                await ytdl.download_audio("vid1", Path("/tmp/out.m4a"))
+
+
+# ---------------------------------------------------------------------------
+# Cookie wiring tests
+# ---------------------------------------------------------------------------
+
+
+class TestCookies:
+    """Tests that cookies_path is plumbed into yt-dlp opts when present."""
+
+    @pytest.mark.asyncio
+    async def test_cookies_added_to_download_opts_when_file_exists(
+        self, tmp_path: Path
+    ) -> None:
+        cookies_file = tmp_path / "cookies.txt"
+        cookies_file.write_text("# Netscape HTTP Cookie File\n")
+        ytdl = YtDl(cookies_path=cookies_file)
+
+        captured_opts: dict = {}
+
+        def capture_ydl(opts: dict) -> MagicMock:
+            captured_opts.update(opts)
+            mock = MagicMock()
+            mock.__enter__ = MagicMock(return_value=mock)
+            mock.__exit__ = MagicMock(return_value=False)
+            return mock
+
+        with patch("app.ytdl.yt_dlp.YoutubeDL", side_effect=capture_ydl):
+            await ytdl.download_audio("vid1", Path("/tmp/out.m4a"))
+
+        assert captured_opts.get("cookiefile") == str(cookies_file)
+
+    @pytest.mark.asyncio
+    async def test_missing_cookies_file_is_silently_ignored(
+        self, tmp_path: Path
+    ) -> None:
+        """Local dev (no secret mounted) must not blow up — yt-dlp opts
+        should simply omit cookiefile when the configured path doesn't
+        exist."""
+        ytdl = YtDl(cookies_path=tmp_path / "does_not_exist.txt")
+
+        captured_opts: dict = {}
+
+        def capture_ydl(opts: dict) -> MagicMock:
+            captured_opts.update(opts)
+            mock = MagicMock()
+            mock.__enter__ = MagicMock(return_value=mock)
+            mock.__exit__ = MagicMock(return_value=False)
+            return mock
+
+        with patch("app.ytdl.yt_dlp.YoutubeDL", side_effect=capture_ydl):
+            await ytdl.download_audio("vid1", Path("/tmp/out.m4a"))
+
+        assert "cookiefile" not in captured_opts

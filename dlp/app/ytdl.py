@@ -26,6 +26,14 @@ class ItemNotFoundError(YtDlError):
     """Raised when a YouTube item (channel, video, etc.) is not found."""
 
 
+class YtDlAuthError(YtDlError):
+    """Raised when YouTube blocks the request and demands authentication
+    (typically the "Sign in to confirm you're not a bot" gate that hits
+    cloud-IP traffic). Surfacing this as its own type lets the API return
+    a discriminated error so the worker can fire an alert to refresh
+    cookies."""
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -68,6 +76,26 @@ class Video(BaseModel):
 class YtDl:
     """Interface to yt-dlp functionality using the Python library directly."""
 
+    def __init__(self, cookies_path: Path | None = None) -> None:
+        # Resolve to None unless the path actually exists, so local dev (where
+        # the secret isn't mounted) never has yt-dlp open a missing file.
+        self._cookies_path: Path | None = (
+            cookies_path if cookies_path and cookies_path.is_file() else None
+        )
+        if cookies_path and self._cookies_path is None:
+            logger.warning("Configured cookies file not found: %s", cookies_path)
+
+    def _ydl_opts(self, extra: dict | None = None) -> dict:
+        """Build a yt-dlp options dict with cookies wired in when available."""
+        opts: dict = {
+            "quiet": True,
+            "no_warnings": True,
+            **(extra or {}),
+        }
+        if self._cookies_path is not None:
+            opts["cookiefile"] = str(self._cookies_path)
+        return opts
+
     # -- URL helpers --------------------------------------------------------
 
     @staticmethod
@@ -88,14 +116,9 @@ class YtDl:
 
     # -- Internal helpers ---------------------------------------------------
 
-    @staticmethod
-    def _extract_info(url: str, ydl_opts: dict | None = None) -> dict:
+    def _extract_info(self, url: str, ydl_opts: dict | None = None) -> dict:
         """Extract info synchronously using yt-dlp (blocking)."""
-        opts: dict = {
-            "quiet": True,
-            "no_warnings": True,
-            **(ydl_opts or {}),
-        }
+        opts = self._ydl_opts(ydl_opts)
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
         if info is None:
@@ -111,6 +134,22 @@ class YtDl:
             or "not found" in msg
             or "does not exist" in msg
             or "video unavailable" in msg
+        )
+
+    @staticmethod
+    def _is_auth_required(exc: yt_dlp.utils.DownloadError) -> bool:
+        """Return *True* if YouTube is gating the request behind a sign-in.
+
+        Matches yt-dlp's bot-check error text — the "Sign in to confirm
+        you're not a bot" message and its variants, plus the suggestion to
+        pass cookies, which yt-dlp emits in the same family of failures.
+        """
+        msg = str(exc).lower()
+        return (
+            "sign in to confirm" in msg
+            or ("confirm you" in msg and "bot" in msg)
+            or "use --cookies" in msg
+            or "--cookies-from-browser" in msg
         )
 
     # -- Public API ---------------------------------------------------------
@@ -149,6 +188,8 @@ class YtDl:
                     {"extract_flat": True},
                 )
             except yt_dlp.utils.DownloadError as exc:
+                if self._is_auth_required(exc):
+                    raise YtDlAuthError(str(exc)) from exc
                 if self._is_not_found(exc):
                     continue
                 raise YtDlError(str(exc)) from exc
@@ -227,6 +268,8 @@ class YtDl:
         try:
             info = await asyncio.to_thread(self._extract_info, url)
         except yt_dlp.utils.DownloadError as exc:
+            if self._is_auth_required(exc):
+                raise YtDlAuthError(str(exc)) from exc
             if self._is_not_found(exc):
                 raise ItemNotFoundError(f"Video not found: {video_id}") from exc
             raise YtDlError(str(exc)) from exc
@@ -256,26 +299,26 @@ class YtDl:
         url = f"https://www.youtube.com/watch?v={quote(video_id)}"
         categories = sponsorblock_categories or ["sponsor", "selfpromo"]
 
-        opts: dict = {
-            "format": "bestaudio[ext=m4a]/bestaudio/best",
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "m4a",
-                },
-                {
-                    "key": "SponsorBlock",
-                    "categories": categories,
-                },
-                {
-                    "key": "ModifyChapters",
-                    "remove_sponsor_segments": categories,
-                },
-            ],
-            "outtmpl": str(output),
-            "quiet": True,
-            "no_warnings": True,
-        }
+        opts = self._ydl_opts(
+            {
+                "format": "bestaudio[ext=m4a]/bestaudio/best",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "m4a",
+                    },
+                    {
+                        "key": "SponsorBlock",
+                        "categories": categories,
+                    },
+                    {
+                        "key": "ModifyChapters",
+                        "remove_sponsor_segments": categories,
+                    },
+                ],
+                "outtmpl": str(output),
+            }
+        )
 
         def _download() -> None:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -284,6 +327,8 @@ class YtDl:
         try:
             await asyncio.to_thread(_download)
         except yt_dlp.utils.DownloadError as exc:
+            if self._is_auth_required(exc):
+                raise YtDlAuthError(str(exc)) from exc
             if self._is_not_found(exc):
                 raise ItemNotFoundError(f"Video not found: {video_id}") from exc
             raise YtDlError(str(exc)) from exc

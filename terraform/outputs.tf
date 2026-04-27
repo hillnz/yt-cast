@@ -13,6 +13,16 @@ output "drive_service_account_email" {
   value       = local.drive_service_account_email
 }
 
+output "yt_cookies_secret_name" {
+  description = "Short name of the Secret Manager secret that holds the YouTube cookies file. scripts/refresh-yt-cookies pushes new versions of this secret."
+  value       = google_secret_manager_secret.yt_cookies.secret_id
+}
+
+output "gcp_project_id" {
+  description = "GCP project ID (echoed for scripts/ that need to invoke gcloud)."
+  value       = var.gcp_project_id
+}
+
 output "r2_bucket_name" {
   description = "Name of the shared R2 bucket."
   value       = cloudflare_r2_bucket.yt_cast.name

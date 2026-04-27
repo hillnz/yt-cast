@@ -8,11 +8,24 @@
     "DRIVE_ROOT_ID": "",
     "DLP_URL": "",
     "R2_PUBLIC_URL": "",
+    // Operator alert email config. Plumbed via terraform; empty values
+    // disable alerting (the worker logs a warning and skips the send).
+    "ALERT_EMAIL_FROM": "",
+    "ALERT_EMAIL_TO": "",
   },
   "r2_buckets": [
     {
       "binding": "STORAGE",
       "bucket_name": "yt-cast",
+    },
+  ],
+  // Cloudflare Email Routing send_email binding. ALERT_EMAIL_TO must be a
+  // verified destination address on a Cloudflare-routed domain in this
+  // account; ALERT_EMAIL_FROM must be on a domain with Email Routing
+  // enabled. Both have to be configured manually in the Cloudflare dash.
+  "send_email": [
+    {
+      "name": "ALERT_MAIL",
     },
   ],
   "queues": {

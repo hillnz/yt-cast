@@ -17,7 +17,7 @@ import httpx
 from js import console
 from pyodide.ffi import JsProxy
 
-from dlp import DlpClient, DlpConfig, DlpError, DlpNotFoundError
+from dlp import DlpAuthRequiredError, DlpClient, DlpConfig, DlpError, DlpNotFoundError
 from download import (
     VideoDownloadError,
     download_video,
@@ -25,6 +25,7 @@ from download import (
     head_video,
     list_cached_video_ids,
 )
+from email_alert import send_youtube_auth_alert
 from feed.channel import ChannelData
 from feed.item import VideoData
 from feed_builder import build_feed
@@ -104,6 +105,10 @@ async def _fetch_video_bounded(
         except DlpNotFoundError:
             console.warn(f"DLP video metadata missing, skipping: {video_id}")
             return None
+        except DlpAuthRequiredError:
+            # Bubble up so the rebuild aborts and the operator gets one
+            # email — every other video in this feed will hit the same wall.
+            raise
         except DlpError as exc:
             console.error(f"DLP video metadata fetch failed for {video_id}: {exc}")
             return None
@@ -222,6 +227,10 @@ async def _rebuild_feed(
                         video_id=video_id,
                         segment_hash=new_hash,
                     )
+                except DlpAuthRequiredError:
+                    # Re-raised so the outer handler fires one alert and
+                    # aborts — every other video would hit the same wall.
+                    raise
                 except (DlpError, VideoDownloadError) as exc:
                     console.error(f"Skipping {video_id}: {exc}")
                     continue
@@ -267,4 +276,11 @@ async def process_message(env: JsProxy, body: object) -> None:
         )
         return
 
-    await _rebuild_feed(env, feed_id=feed_id, channel_id=channel_id)
+    try:
+        await _rebuild_feed(env, feed_id=feed_id, channel_id=channel_id)
+    except DlpAuthRequiredError as exc:
+        # YouTube is gating cloud-IP traffic — refreshing cookies is a
+        # manual step. Fire a dedup'd alert and ack the message; retrying
+        # without fresh cookies would only burn the queue's retry budget.
+        console.error(f"YouTube auth required, aborting feed {feed_id}: {exc}")
+        await send_youtube_auth_alert(env)

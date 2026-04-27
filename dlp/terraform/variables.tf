@@ -202,6 +202,24 @@ variable "credentials_secret_version" {
   default     = "latest"
 }
 
+variable "yt_cookies_path" {
+  description = "Path inside the container to the Netscape-format YouTube cookies file (YT_COOKIES_PATH). yt-dlp reads this when it exists, allowing authenticated access to videos that block anonymous traffic from cloud IPs. Must be in a directory distinct from credentials_path because Cloud Run rejects overlapping volume mounts."
+  type        = string
+  default     = "/cookies/cookies.txt"
+}
+
+variable "yt_cookies_secret_id" {
+  description = "Optional Secret Manager secret ID (short name, in the same project) holding the YouTube cookies file (Netscape format). When set, it is mounted at yt_cookies_path and YT_COOKIES_PATH is exported to the app."
+  type        = string
+  default     = null
+}
+
+variable "yt_cookies_secret_version" {
+  description = "Version of the cookies secret to mount. Defaults to \"latest\" so refreshing the secret picks up on the next cold start without redeploying."
+  type        = string
+  default     = "latest"
+}
+
 variable "extra_env" {
   description = "Additional environment variables to inject into the container."
   type        = map(string)

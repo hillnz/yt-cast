@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Refresh the YouTube cookies secret used by the dlp Cloud Run service.
+#
+# YouTube blocks anonymous traffic from cloud IPs with "Sign in to confirm
+# you're not a bot". The dlp service mounts a cookies file from Secret
+# Manager and passes it to yt-dlp via cookiefile. This script lets you
+# update that secret: it launches Firefox with a throwaway profile, you
+# sign in to YouTube, and on browser exit the cookies are exported in
+# Netscape format and pushed as a new version of the secret. The Cloud
+# Run mount uses version="latest" so the next cold start picks up the
+# refresh — no redeploy needed.
+#
+# Usage:
+#   scripts/refresh-yt-cookies
+#
+# The secret name and GCP project are read from terraform outputs; override
+# with YT_COOKIES_SECRET and GCP_PROJECT in the environment if needed.
+# Firefox path defaults to the macOS install — override with FIREFOX_BIN.
+#
+# Requires: gcloud (authenticated, secretmanager.secretVersionAdder on the
+# secret), Firefox, uv, and `terraform output` working from the repo root.
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+tf_output() {
+  (cd "$repo_root" && terraform output -raw "$1" 2>/dev/null || true)
+}
+
+secret="${YT_COOKIES_SECRET:-$(tf_output yt_cookies_secret_name)}"
+project="${GCP_PROJECT:-$(tf_output gcp_project_id)}"
+
+if [[ -z "$secret" ]]; then
+  echo "error: YT_COOKIES_SECRET not set and 'terraform output -raw yt_cookies_secret_name' failed" >&2
+  exit 1
+fi
+if [[ -z "$project" ]]; then
+  echo "error: GCP_PROJECT not set and 'terraform output -raw gcp_project_id' failed" >&2
+  exit 1
+fi
+
+firefox_bin="${FIREFOX_BIN:-/Applications/Firefox.app/Contents/MacOS/firefox}"
+if [[ ! -x "$firefox_bin" ]]; then
+  echo "error: Firefox not found at $firefox_bin (override with FIREFOX_BIN)" >&2
+  exit 1
+fi
+
+profile_dir=$(mktemp -d -t yt-cast-firefox)
+cookies_file=$(mktemp -t yt-cast-cookies)
+cleanup() { rm -rf "$profile_dir" "$cookies_file"; }
+trap cleanup EXIT
+
+cat <<EOF
+Launching Firefox with a temporary profile.
+Sign in to YouTube in the new window, then close the browser to continue.
+  profile: $profile_dir
+EOF
+
+# -no-remote prevents the launched process from delegating to an existing
+# Firefox instance; combined with -profile this gives us a fresh isolated
+# instance whose process we can wait on.
+"$firefox_bin" -no-remote -profile "$profile_dir" "https://www.youtube.com/" || true
+
+echo "Extracting cookies..."
+(cd "$repo_root/dlp" && uv run --quiet python -c "
+import sys
+from yt_dlp.cookies import extract_cookies_from_browser
+profile, out = sys.argv[1], sys.argv[2]
+jar = extract_cookies_from_browser('firefox', profile=profile)
+jar.save(out)
+" "$profile_dir" "$cookies_file")
+
+# Bail if the file has no cookie lines — header-only output means the user
+# closed the window without signing in (or with an empty profile).
+if ! grep -qvE '^[[:space:]]*(#|$)' "$cookies_file"; then
+  echo "error: no cookies were extracted (did you sign in to YouTube?)" >&2
+  exit 1
+fi
+
+echo "Pushing new version to Secret Manager: $secret (project $project)"
+gcloud secrets versions add "$secret" \
+  --data-file="$cookies_file" \
+  --project="$project"
+
+cat <<EOF
+
+Done. The next dlp Cloud Run cold start will use the refreshed cookies.
+To force a refresh now, redeploy the dlp service (e.g. \`make deploy-dlp\`)
+or wait for the current instance to scale to zero.
+EOF

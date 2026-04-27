@@ -17,7 +17,9 @@ def get_settings() -> Settings:
 @lru_cache(maxsize=1)
 def get_ytdl() -> YtDl:
     """Return a cached YtDl service instance."""
-    return YtDl()
+    s = get_settings()
+    cookies_path = Path(s.yt_cookies_path) if s.yt_cookies_path else None
+    return YtDl(cookies_path=cookies_path)
 
 
 @lru_cache(maxsize=1)

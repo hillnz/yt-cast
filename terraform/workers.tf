@@ -42,9 +42,11 @@ locals {
   )))
 
   dlp_worker_runtime_vars = {
-    DRIVE_ROOT_ID = var.drive_root_id
-    DLP_URL       = module.dlp.uri
-    R2_PUBLIC_URL = local.r2_public_url
+    DRIVE_ROOT_ID    = var.drive_root_id
+    DLP_URL          = module.dlp.uri
+    R2_PUBLIC_URL    = local.r2_public_url
+    ALERT_EMAIL_FROM = var.alert_email_from
+    ALERT_EMAIL_TO   = var.alert_email_to
   }
 }
 
@@ -94,7 +96,9 @@ resource "null_resource" "dlp_worker_deploy" {
       uv run pywrangler deploy \
         --var "DRIVE_ROOT_ID:$DRIVE_ROOT_ID" \
         --var "DLP_URL:$DLP_URL" \
-        --var "R2_PUBLIC_URL:$R2_PUBLIC_URL"
+        --var "R2_PUBLIC_URL:$R2_PUBLIC_URL" \
+        --var "ALERT_EMAIL_FROM:$ALERT_EMAIL_FROM" \
+        --var "ALERT_EMAIL_TO:$ALERT_EMAIL_TO"
       printf '%s' "$FEED_ID_SECRET"         | uv run pywrangler secret put FEED_ID_SECRET
       printf '%s' "$GOOGLE_SERVICE_ACCOUNT" | uv run pywrangler secret put GOOGLE_SERVICE_ACCOUNT
     EOT
@@ -103,6 +107,8 @@ resource "null_resource" "dlp_worker_deploy" {
       DRIVE_ROOT_ID          = var.drive_root_id
       DLP_URL                = module.dlp.uri
       R2_PUBLIC_URL          = local.r2_public_url
+      ALERT_EMAIL_FROM       = var.alert_email_from
+      ALERT_EMAIL_TO         = var.alert_email_to
       FEED_ID_SECRET         = random_password.feed_id_secret.result
       GOOGLE_SERVICE_ACCOUNT = local.google_service_account_json
     }
