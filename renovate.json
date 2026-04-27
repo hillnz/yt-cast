@@ -1,4 +1,11 @@
 {
   "extends": ["config:base"],
-  "automerge": true
+  "automerge": true,
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["python", "ghcr.io/astral-sh/uv"],
+      "groupName": "python base images"
+    }
+  ]
 }
