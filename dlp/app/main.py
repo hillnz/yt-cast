@@ -48,9 +48,7 @@ async def item_not_found_handler(
 
 
 @app.exception_handler(YtDlAuthError)
-async def ytdl_auth_error_handler(
-    request: Request, exc: YtDlAuthError
-) -> JSONResponse:
+async def ytdl_auth_error_handler(request: Request, exc: YtDlAuthError) -> JSONResponse:
     """Return a discriminated 502 when YouTube demands authentication.
 
     The ``code`` field lets the dlp-worker react specifically (e.g. fire
