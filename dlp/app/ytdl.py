@@ -68,6 +68,30 @@ class Video(BaseModel):
     duration: str
 
 
+class Format(BaseModel):
+    """A single available download format for a YouTube video.
+
+    Mirrors the columns surfaced by ``yt-dlp --list-formats``.
+    """
+
+    format_id: str
+    ext: str
+    resolution: str | None = None
+    fps: float | None = None
+    audio_channels: int | None = None
+    filesize: int | None = None
+    filesize_approx: int | None = None
+    tbr: float | None = None
+    protocol: str | None = None
+    vcodec: str | None = None
+    vbr: float | None = None
+    acodec: str | None = None
+    abr: float | None = None
+    asr: int | None = None
+    format_note: str | None = None
+    format: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # YtDl service
 # ---------------------------------------------------------------------------
@@ -281,6 +305,47 @@ class YtDl:
             upload_date=info.get("upload_date", ""),
             duration=info.get("duration_string", ""),
         )
+
+    async def get_video_formats(self, video_id: str) -> list[Format]:
+        """Fetch the list of available formats for a YouTube video.
+
+        Returns the equivalent of ``yt-dlp --list-formats``: one
+        :class:`Format` per available format yt-dlp reports for the video.
+        """
+        logger.debug("get_video_formats(%s)", video_id)
+
+        url = f"https://www.youtube.com/watch?v={quote(video_id)}"
+
+        try:
+            info = await asyncio.to_thread(self._extract_info, url)
+        except yt_dlp.utils.DownloadError as exc:
+            if self._is_auth_required(exc):
+                raise YtDlAuthError(str(exc)) from exc
+            if self._is_not_found(exc):
+                raise ItemNotFoundError(f"Video not found: {video_id}") from exc
+            raise YtDlError(str(exc)) from exc
+
+        return [
+            Format(
+                format_id=f.get("format_id", ""),
+                ext=f.get("ext", ""),
+                resolution=f.get("resolution"),
+                fps=f.get("fps"),
+                audio_channels=f.get("audio_channels"),
+                filesize=f.get("filesize"),
+                filesize_approx=f.get("filesize_approx"),
+                tbr=f.get("tbr"),
+                protocol=f.get("protocol"),
+                vcodec=f.get("vcodec"),
+                vbr=f.get("vbr"),
+                acodec=f.get("acodec"),
+                abr=f.get("abr"),
+                asr=f.get("asr"),
+                format_note=f.get("format_note"),
+                format=f.get("format"),
+            )
+            for f in info.get("formats") or []
+        ]
 
     async def download_audio(
         self,

@@ -8,6 +8,7 @@ import yt_dlp
 
 from app.ytdl import (
     Channel,
+    Format,
     ItemNotFoundError,
     Thumbnail,
     Video,
@@ -465,6 +466,137 @@ class TestGetVideoInfo:
         ):
             with pytest.raises(YtDlError):
                 await ytdl.get_video_info("abc123")
+
+
+# ---------------------------------------------------------------------------
+# get_video_formats tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetVideoFormats:
+    """Tests for YtDl.get_video_formats."""
+
+    @pytest.mark.asyncio
+    async def test_returns_formats(self, ytdl: YtDl) -> None:
+        info = {
+            "id": "abc123",
+            "formats": [
+                {
+                    "format_id": "140",
+                    "ext": "m4a",
+                    "resolution": "audio only",
+                    "acodec": "mp4a.40.2",
+                    "abr": 129.5,
+                    "asr": 44100,
+                    "audio_channels": 2,
+                    "tbr": 129.5,
+                    "protocol": "https",
+                    "format_note": "medium",
+                    "format": "140 - audio only (medium)",
+                },
+                {
+                    "format_id": "137",
+                    "ext": "mp4",
+                    "resolution": "1920x1080",
+                    "fps": 30.0,
+                    "vcodec": "avc1.640028",
+                    "vbr": 4500.1,
+                    "acodec": "none",
+                    "tbr": 4500.1,
+                    "protocol": "https",
+                    "format_note": "1080p",
+                    "format": "137 - 1920x1080 (1080p)",
+                },
+            ],
+        }
+        with patch.object(YtDl, "_extract_info", return_value=info):
+            formats = await ytdl.get_video_formats("abc123")
+
+        assert len(formats) == 2
+        assert formats[0].format_id == "140"
+        assert formats[0].ext == "m4a"
+        assert formats[0].audio_channels == 2
+        assert formats[0].abr == 129.5
+        assert formats[1].format_id == "137"
+        assert formats[1].resolution == "1920x1080"
+        assert formats[1].fps == 30.0
+
+    @pytest.mark.asyncio
+    async def test_url_contains_encoded_video_id(self, ytdl: YtDl) -> None:
+        captured_url: str = ""
+
+        def capture_extract(url: str, opts: dict | None = None) -> dict:
+            nonlocal captured_url
+            captured_url = url
+            return {"id": "abc123", "formats": []}
+
+        with patch.object(YtDl, "_extract_info", side_effect=capture_extract):
+            await ytdl.get_video_formats("abc123")
+
+        assert captured_url.startswith("https://www.youtube.com/watch?v=")
+        assert "abc123" in captured_url
+
+    @pytest.mark.asyncio
+    async def test_missing_formats_key_yields_empty_list(self, ytdl: YtDl) -> None:
+        with patch.object(YtDl, "_extract_info", return_value={"id": "abc"}):
+            formats = await ytdl.get_video_formats("abc")
+
+        assert formats == []
+
+    @pytest.mark.asyncio
+    async def test_null_formats_yields_empty_list(self, ytdl: YtDl) -> None:
+        """yt-dlp can emit ``formats: None`` for some extractor edge cases."""
+        with patch.object(
+            YtDl, "_extract_info", return_value={"id": "abc", "formats": None}
+        ):
+            formats = await ytdl.get_video_formats("abc")
+
+        assert formats == []
+
+    @pytest.mark.asyncio
+    async def test_format_with_only_required_fields(self, ytdl: YtDl) -> None:
+        """Formats often omit optional fields; the model must tolerate that."""
+        info = {"formats": [{"format_id": "18", "ext": "mp4"}]}
+        with patch.object(YtDl, "_extract_info", return_value=info):
+            formats = await ytdl.get_video_formats("abc")
+
+        assert len(formats) == 1
+        assert formats[0].format_id == "18"
+        assert formats[0].ext == "mp4"
+        assert formats[0].resolution is None
+        assert formats[0].fps is None
+
+    @pytest.mark.asyncio
+    async def test_raises_item_not_found_on_404(self, ytdl: YtDl) -> None:
+        with patch.object(
+            YtDl,
+            "_extract_info",
+            side_effect=yt_dlp.utils.DownloadError("Video unavailable"),
+        ):
+            with pytest.raises(ItemNotFoundError):
+                await ytdl.get_video_formats("abc123")
+
+    @pytest.mark.asyncio
+    async def test_raises_auth_error_on_signin_required(self, ytdl: YtDl) -> None:
+        with patch.object(
+            YtDl,
+            "_extract_info",
+            side_effect=yt_dlp.utils.DownloadError(
+                "Sign in to confirm you're not a bot"
+            ),
+        ):
+            with pytest.raises(YtDlAuthError):
+                await ytdl.get_video_formats("abc123")
+
+    @pytest.mark.asyncio
+    async def test_raises_ytdl_error_on_other_download_error(self, ytdl: YtDl) -> None:
+        with patch.object(
+            YtDl,
+            "_extract_info",
+            side_effect=yt_dlp.utils.DownloadError("Some other error"),
+        ):
+            with pytest.raises(YtDlError):
+                await ytdl.get_video_formats("abc123")
 
 
 # ---------------------------------------------------------------------------
