@@ -1,5 +1,7 @@
 """FastAPI application entry point."""
 
+import logging
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -14,12 +16,14 @@ from app.storage import StorageError
 from app.ytdl import ItemNotFoundError, YtDlAuthError, YtDlError
 
 
+log = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Manage application startup and shutdown events."""
-    # Startup: initialise resources here as needed
+    git_hash = os.environ.get("GIT_HASH", "unknown")
+    log.info("dlp version %s", git_hash)
     yield
-    # Shutdown: clean up resources here as needed
 
 
 app = FastAPI(

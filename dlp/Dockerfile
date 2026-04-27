@@ -11,6 +11,9 @@ COPY app/ ./app/
 
 FROM python:3.14.4-alpine AS runtime
 
+ARG GIT_HASH=unknown
+ENV GIT_HASH=$GIT_HASH
+
 # ffmpeg (required by yt-dlp for audio extraction / post-processing)
 # quickjs (required by yt-dlp-ejs for full YouTube support)
 RUN apk add --no-cache ffmpeg quickjs
