@@ -169,3 +169,13 @@ output "dlp_worker_name" {
   description = "Name of the deployed dlp-worker."
   value       = module.main.dlp_worker_name
 }
+
+output "yt_cookies_secret_name" {
+  description = "Name of the secret storing the Netscape HTTP Cookie File for yt-dlp."
+  value       = module.main.yt_cookies_secret_name
+}
+
+output "gcp_project_id" {
+  description = "ID of the GCP project."
+  value       = module.main.gcp_project_id
+}

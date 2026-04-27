@@ -102,6 +102,22 @@ resource "google_secret_manager_secret" "yt_cookies" {
   }
 }
 
+# Placeholder so the Cloud Run mount has *some* "latest" to point at on
+# the first apply (Cloud Run rejects the deploy otherwise). yt-dlp reads
+# a header-only Netscape file as an empty cookie jar, so the service
+# behaves as if no cookies were configured until refresh-yt-cookies
+# pushes a real version. Subsequent versions added via the script become
+# v2, v3, ... and TF doesn't manage them — ignore_changes here means we
+# never recreate this placeholder if the file content drifts.
+resource "google_secret_manager_secret_version" "yt_cookies_placeholder" {
+  secret      = google_secret_manager_secret.yt_cookies.id
+  secret_data = "# Netscape HTTP Cookie File\n# Placeholder — run scripts/refresh-yt-cookies to populate.\n"
+
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
+}
+
 # ---------------------------------------------------------------------------
 # dlp Cloud Run service (delegated to the existing dlp/terraform module)
 # ---------------------------------------------------------------------------
