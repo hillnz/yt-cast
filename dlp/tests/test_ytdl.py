@@ -537,6 +537,21 @@ class TestGetVideoFormats:
         assert "abc123" in captured_url
 
     @pytest.mark.asyncio
+    async def test_passes_ignore_no_formats_error(self, ytdl: YtDl) -> None:
+        """yt-dlp's default selector raises if no format matches; we only
+        want the list, so the call must opt out of that error."""
+        captured_opts: dict = {}
+
+        def capture_extract(url: str, opts: dict | None = None) -> dict:
+            captured_opts.update(opts or {})
+            return {"formats": []}
+
+        with patch.object(YtDl, "_extract_info", side_effect=capture_extract):
+            await ytdl.get_video_formats("abc123")
+
+        assert captured_opts.get("ignore_no_formats_error") is True
+
+    @pytest.mark.asyncio
     async def test_missing_formats_key_yields_empty_list(self, ytdl: YtDl) -> None:
         with patch.object(YtDl, "_extract_info", return_value={"id": "abc"}):
             formats = await ytdl.get_video_formats("abc")

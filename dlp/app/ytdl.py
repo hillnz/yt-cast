@@ -317,7 +317,11 @@ class YtDl:
         url = f"https://www.youtube.com/watch?v={quote(video_id)}"
 
         try:
-            info = await asyncio.to_thread(self._extract_info, url)
+            info = await asyncio.to_thread(
+                self._extract_info,
+                url,
+                {"ignore_no_formats_error": True},
+            )
         except yt_dlp.utils.DownloadError as exc:
             if self._is_auth_required(exc):
                 raise YtDlAuthError(str(exc)) from exc
