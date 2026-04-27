@@ -36,6 +36,12 @@ variable "dlp_extra" {
   default     = {}
 }
 
+variable "dlp_local_invoker_users" {
+  description = "User emails (without the 'user:' prefix) to grant roles/iam.serviceAccountTokenCreator on the Drive service account. The Drive SA is the run.invoker on the dlp Cloud Run service, so this lets these users impersonate it locally — that's what scripts/dlp-curl needs to mint an audience-bound ID token. Only applied when Terraform manages the Drive SA (google_service_account_json is null)."
+  type        = list(string)
+  default     = []
+}
+
 # ---------------------------------------------------------------------------
 # Cloudflare account + shared infra
 # ---------------------------------------------------------------------------

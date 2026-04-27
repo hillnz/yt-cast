@@ -35,6 +35,24 @@ resource "google_service_account_key" "drive" {
   service_account_id = google_service_account.drive[0].name
 }
 
+resource "google_project_service" "iamcredentials" {
+  count = length(var.dlp_local_invoker_users) > 0 ? 1 : 0
+
+  project            = var.gcp_project_id
+  service            = "iamcredentials.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_service_account_iam_member" "drive_local_invokers" {
+  for_each = length(google_service_account.drive) > 0 ? toset(var.dlp_local_invoker_users) : toset([])
+
+  service_account_id = google_service_account.drive[0].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${each.value}"
+
+  depends_on = [google_project_service.iamcredentials]
+}
+
 locals {
   google_service_account_json = (
     var.google_service_account_json != null

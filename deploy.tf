@@ -95,6 +95,12 @@ variable "repo_root" {
   default = null
 }
 
+variable "dlp_local_invoker_users" {
+  type        = list(string)
+  default     = []
+  description = "List of users to grant roles/iam.serviceAccountTokenCreator on the DLP service account."
+}
+
 # ---------------------------------------------------------------------------
 # Main module
 # ---------------------------------------------------------------------------
@@ -116,6 +122,7 @@ module "main" {
   drive_root_id               = var.drive_root_id
   google_service_account_json = var.google_service_account_json
   repo_root                   = var.repo_root
+  dlp_local_invoker_users     = var.dlp_local_invoker_users
 }
 
 # ---------------------------------------------------------------------------

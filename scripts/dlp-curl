@@ -18,7 +18,12 @@
 # with DLP_URL=... and DLP_IMPERSONATE_SA=... in the environment if needed.
 #
 # Your gcloud user needs roles/iam.serviceAccountTokenCreator on the SA.
-# Project owners have it automatically.
+# This is NOT included in roles/owner — it has to be granted explicitly.
+# Add your email to the dlp_local_invoker_users terraform variable, or grant it
+# manually:
+#   gcloud iam service-accounts add-iam-policy-binding "$DLP_IMPERSONATE_SA" \
+#     --member="user:you@example.com" \
+#     --role="roles/iam.serviceAccountTokenCreator"
 
 set -euo pipefail
 
