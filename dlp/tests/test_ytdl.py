@@ -1,5 +1,6 @@
 """Tests for the ytdl module."""
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -872,7 +873,31 @@ class TestCookies:
         with patch("app.ytdl.yt_dlp.YoutubeDL", side_effect=capture_ydl):
             await ytdl.download_audio("vid1", Path("/tmp/out.m4a"))
 
-        assert captured_opts.get("cookiefile") == str(cookies_file)
+        cookiefile = captured_opts.get("cookiefile")
+        assert cookiefile is not None
+        # Should be a writable copy, not the (possibly read-only) source.
+        assert cookiefile != str(cookies_file)
+        assert Path(cookiefile).read_text() == "# Netscape HTTP Cookie File\n"
+
+    def test_cookies_source_is_copied_to_writable_location(
+        self, tmp_path: Path
+    ) -> None:
+        """The source cookies file may sit on a read-only mount; the copy
+        yt-dlp uses must be writable so its post-extract jar save succeeds."""
+        cookies_file = tmp_path / "cookies.txt"
+        cookies_file.write_text("# Netscape HTTP Cookie File\n")
+        # Make the source dir read-only to simulate the Cloud Run secret mount.
+        cookies_file.chmod(0o444)
+        ytdl = YtDl(cookies_path=cookies_file)
+
+        copy_path = ytdl._cookies_path
+        assert copy_path is not None
+        assert copy_path != cookies_file
+        assert os.access(copy_path, os.W_OK)
+        # Writing back to the copy must succeed (this is what yt-dlp does
+        # on YoutubeDL.__exit__).
+        copy_path.write_text("# rewritten\n")
+        assert copy_path.read_text() == "# rewritten\n"
 
     @pytest.mark.asyncio
     async def test_missing_cookies_file_is_silently_ignored(

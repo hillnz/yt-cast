@@ -3,7 +3,10 @@
 import argparse
 import asyncio
 import logging
+import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
@@ -103,11 +106,18 @@ class YtDl:
     def __init__(self, cookies_path: Path | None = None) -> None:
         # Resolve to None unless the path actually exists, so local dev (where
         # the secret isn't mounted) never has yt-dlp open a missing file.
-        self._cookies_path: Path | None = (
-            cookies_path if cookies_path and cookies_path.is_file() else None
-        )
-        if cookies_path and self._cookies_path is None:
-            logger.warning("Configured cookies file not found: %s", cookies_path)
+        if cookies_path and cookies_path.is_file():
+            # yt-dlp writes the cookie jar back to ``cookiefile`` on every
+            # YoutubeDL context exit. Cloud Run mounts secrets read-only,
+            # so copy to a writable temp file and point yt-dlp at the copy.
+            fd, tmp = tempfile.mkstemp(prefix="yt-cookies-", suffix=".txt")
+            os.close(fd)
+            shutil.copyfile(cookies_path, tmp)
+            self._cookies_path: Path | None = Path(tmp)
+        else:
+            self._cookies_path = None
+            if cookies_path:
+                logger.warning("Configured cookies file not found: %s", cookies_path)
 
     def _ydl_opts(self, extra: dict | None = None) -> dict:
         """Build a yt-dlp options dict with cookies wired in when available."""
