@@ -102,6 +102,23 @@ variable "alert_email_to" {
 }
 
 # ---------------------------------------------------------------------------
+# Tailscale sidecar (optional)
+# ---------------------------------------------------------------------------
+
+variable "tailscale_exit_node" {
+  description = "Tailscale exit node hostname or IP. When set, a tailscale sidecar is added to the dlp Cloud Run service and yt-dlp egress is routed through its SOCKS5 proxy. tailscale_auth_key must also be set."
+  type        = string
+  default     = null
+}
+
+variable "tailscale_auth_key" {
+  description = "Tailscale auth key used by the dlp sidecar. Required when tailscale_exit_node is set. Use a reusable + ephemeral key so cold-started Cloud Run instances can authenticate without manual intervention. Stored in Secret Manager."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+# ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
 

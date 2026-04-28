@@ -37,10 +37,20 @@ locals {
     : {}
   )
 
+  tailscale_enabled  = var.tailscale_exit_node != null
+  tailscale_hostname = coalesce(var.tailscale_hostname, var.service_name)
+
+  ytdl_proxy_env = (
+    local.tailscale_enabled
+    ? { YTDL_PROXY = "socks5://127.0.0.1:${var.tailscale_socks5_port}" }
+    : {}
+  )
+
   plain_env = merge(
     local.base_env,
     local.google_creds_env,
     local.yt_cookies_env,
+    local.ytdl_proxy_env,
     var.extra_env,
   )
 
@@ -84,6 +94,13 @@ resource "google_cloud_run_v2_service" "this" {
     }
 
     containers {
+      # Naming the main container is only required when there are sidecars
+      # (Cloud Run rejects multi-container revisions where any container is
+      # unnamed). Keeping the name conditional avoids a no-op revision spin
+      # when tailscale isn't in use.
+      name       = local.tailscale_enabled ? "app" : null
+      depends_on = local.tailscale_enabled ? ["tailscale"] : []
+
       image = var.image
 
       ports {
@@ -124,6 +141,72 @@ resource "google_cloud_run_v2_service" "this" {
       }
     }
 
+    # Tailscale userspace sidecar. Shares the network namespace with the
+    # main container so the SOCKS5 proxy is reachable on 127.0.0.1.
+    dynamic "containers" {
+      for_each = local.tailscale_enabled ? [1] : []
+      content {
+        name  = "tailscale"
+        image = var.tailscale_image
+
+        resources {
+          limits = {
+            cpu    = var.tailscale_cpu
+            memory = var.tailscale_memory
+          }
+          cpu_idle = var.cpu_idle
+        }
+
+        env {
+          name = "TS_AUTHKEY"
+          value_source {
+            secret_key_ref {
+              secret  = var.tailscale_auth_key_secret_id
+              version = var.tailscale_auth_key_secret_version
+            }
+          }
+        }
+
+        env {
+          name  = "TS_USERSPACE"
+          value = "true"
+        }
+
+        env {
+          name  = "TS_SOCKS5_SERVER"
+          value = "127.0.0.1:${var.tailscale_socks5_port}"
+        }
+
+        env {
+          name  = "TS_HOSTNAME"
+          value = local.tailscale_hostname
+        }
+
+        # /tmp is the only writable path on Cloud Run; state is ephemeral
+        # so a reusable+ephemeral auth key is required.
+        env {
+          name  = "TS_STATE_DIR"
+          value = "/tmp/tsstate"
+        }
+
+        env {
+          name  = "TS_EXTRA_ARGS"
+          value = "--exit-node=${var.tailscale_exit_node}"
+        }
+
+        # Sidecars need a startup probe so Cloud Run knows when they're
+        # ready; the main container's depends_on blocks until this passes.
+        startup_probe {
+          tcp_socket {
+            port = var.tailscale_socks5_port
+          }
+          timeout_seconds   = 3
+          period_seconds    = 5
+          failure_threshold = 30
+        }
+      }
+    }
+
     dynamic "volumes" {
       for_each = var.credentials_secret_id == null ? [] : [1]
       content {
@@ -154,6 +237,13 @@ resource "google_cloud_run_v2_service" "this" {
       }
     }
   }
+
+  lifecycle {
+    precondition {
+      condition     = !local.tailscale_enabled || var.tailscale_auth_key_secret_id != null
+      error_message = "tailscale_auth_key_secret_id must be set when tailscale_exit_node is configured."
+    }
+  }
 }
 
 resource "google_cloud_run_v2_service_iam_member" "invokers" {
@@ -180,6 +270,15 @@ resource "google_secret_manager_secret_iam_member" "yt_cookies_accessor" {
 
   project   = var.project_id
   secret_id = var.yt_cookies_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.service_account_email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "tailscale_auth_key_accessor" {
+  count = local.tailscale_enabled && var.tailscale_auth_key_secret_id != null ? 1 : 0
+
+  project   = var.project_id
+  secret_id = var.tailscale_auth_key_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${local.service_account_email}"
 }

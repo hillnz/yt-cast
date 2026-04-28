@@ -225,3 +225,60 @@ variable "extra_env" {
   type        = map(string)
   default     = {}
 }
+
+# ---------------------------------------------------------------------------
+# Tailscale sidecar (optional)
+#
+# When tailscale_exit_node is set, a tailscale userspace container is added
+# to the Cloud Run service. It exposes a SOCKS5 proxy on localhost that the
+# dlp container is configured to use via YTDL_PROXY, so yt-dlp egress flows
+# through the tailnet exit node instead of Google's IP ranges.
+# ---------------------------------------------------------------------------
+
+variable "tailscale_exit_node" {
+  description = "Tailscale exit node hostname or IP. When set, the tailscale sidecar is enabled and yt-dlp is routed through its SOCKS5 proxy. tailscale_auth_key_secret_id must also be set."
+  type        = string
+  default     = null
+}
+
+variable "tailscale_auth_key_secret_id" {
+  description = "Secret Manager secret ID (short name, in the same project) holding the Tailscale auth key. Required when tailscale_exit_node is set. Use a reusable + ephemeral key so cold-started instances can authenticate without manual intervention."
+  type        = string
+  default     = null
+}
+
+variable "tailscale_auth_key_secret_version" {
+  description = "Version of the tailscale auth key secret to mount."
+  type        = string
+  default     = "latest"
+}
+
+variable "tailscale_image" {
+  description = "Container image for the tailscale sidecar."
+  type        = string
+  default     = "ghcr.io/tailscale/tailscale:stable"
+}
+
+variable "tailscale_hostname" {
+  description = "Hostname tailscale registers on the tailnet. Defaults to the Cloud Run service name."
+  type        = string
+  default     = null
+}
+
+variable "tailscale_socks5_port" {
+  description = "Port the tailscale sidecar exposes its SOCKS5 proxy on (loopback only)."
+  type        = number
+  default     = 1055
+}
+
+variable "tailscale_cpu" {
+  description = "CPU allocation for the tailscale sidecar. Cloud Run requires the per-container limits to sum to a valid instance total — bump var.cpu/memory if you change this."
+  type        = string
+  default     = "1"
+}
+
+variable "tailscale_memory" {
+  description = "Memory allocation for the tailscale sidecar."
+  type        = string
+  default     = "512Mi"
+}

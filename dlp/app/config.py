@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     local_storage_path: str = "./archive"
     redoc_enabled: bool = False
     yt_cookies_path: str | None = None
+    ytdl_proxy: str | None = None
 
 
 settings = Settings()

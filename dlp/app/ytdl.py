@@ -103,7 +103,11 @@ class Format(BaseModel):
 class YtDl:
     """Interface to yt-dlp functionality using the Python library directly."""
 
-    def __init__(self, cookies_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        cookies_path: Path | None = None,
+        proxy: str | None = None,
+    ) -> None:
         # Resolve to None unless the path actually exists, so local dev (where
         # the secret isn't mounted) never has yt-dlp open a missing file.
         if cookies_path and cookies_path.is_file():
@@ -118,6 +122,7 @@ class YtDl:
             self._cookies_path = None
             if cookies_path:
                 logger.warning("Configured cookies file not found: %s", cookies_path)
+        self._proxy = proxy
 
     def _ydl_opts(self, extra: dict | None = None) -> dict:
         """Build a yt-dlp options dict with cookies wired in when available."""
@@ -128,6 +133,8 @@ class YtDl:
         }
         if self._cookies_path is not None:
             opts["cookiefile"] = str(self._cookies_path)
+        if self._proxy is not None:
+            opts["proxy"] = self._proxy
         return opts
 
     # -- URL helpers --------------------------------------------------------

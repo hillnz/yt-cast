@@ -101,6 +101,17 @@ variable "dlp_local_invoker_users" {
   description = "List of users to grant roles/iam.serviceAccountTokenCreator on the DLP service account."
 }
 
+variable "tailscale_exit_node" {
+  type    = string
+  default = null
+}
+
+variable "tailscale_auth_key" {
+  type      = string
+  sensitive = true
+  default   = null
+}
+
 # ---------------------------------------------------------------------------
 # Main module
 # ---------------------------------------------------------------------------
@@ -123,6 +134,8 @@ module "main" {
   google_service_account_json = var.google_service_account_json
   repo_root                   = var.repo_root
   dlp_local_invoker_users     = var.dlp_local_invoker_users
+  tailscale_exit_node         = var.tailscale_exit_node
+  tailscale_auth_key          = var.tailscale_auth_key
 }
 
 # ---------------------------------------------------------------------------
