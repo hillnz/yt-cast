@@ -233,9 +233,7 @@ async def test_formats_ytdl_error_returns_502(
 
 
 @pytest.mark.asyncio
-async def test_formats_empty_list(
-    override_deps, mock_ytdl: AsyncMock
-) -> None:
+async def test_formats_empty_list(override_deps, mock_ytdl: AsyncMock) -> None:
     """An empty formats list should return 200 with []."""
     mock_ytdl.get_video_formats.return_value = []
 
