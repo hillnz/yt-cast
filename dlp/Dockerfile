@@ -9,7 +9,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY app/ ./app/
 
 
-FROM python:3.14.4-alpine AS runtime
+FROM python:3.14.7-alpine AS runtime
 
 ARG GIT_HASH=unknown
 ENV GIT_HASH=$GIT_HASH
